@@ -1,8 +1,11 @@
 # JARVIS
 
-Assistente pessoal de voz estilo Homem de Ferro: fale **"Hey Jarvis"** perto do tablet
-(ou toque no reator no celular/relógio), peça **"liga a luz da sala"** e a casa obedece —
-tudo processado no seu notebook, sem mandar áudio pra internet.
+Assistente pessoal de voz estilo Homem de Ferro, com a voz que você escolheu.
+Fale **"Jarvis, liga a luz da sala"** — tudo numa frase só — e a casa obedece.
+Tudo é processado no seu notebook, sem mandar áudio pra internet.
+
+Também funciona em duas etapas: diga só **"Jarvis"**, ele responde "Sim?" e aí você
+manda o comando. No celular e no relógio dá pra tocar no reator em vez de chamar.
 
 ## Como ligar
 
@@ -23,7 +26,7 @@ Depois abra `http://SEU-IP:8040` em qualquer navegador da casa — essa é a tel
 | PC (este notebook) | `releases\JARVIS-Desktop-Setup.exe` | Instala o JARVIS de bandeja: fica só um ícone oculto perto do relógio, ouvindo. Diga "Hey Jarvis" e a janela com o reator aparece; ao terminar, ela some sozinha. Clique no ícone da bandeja pra abrir/fechar na mão. Inicia com o Windows. |
 
 No tablet, deixe o app aberto no suporte: a tela fica preta com relógio, temperatura e o
-reator respirando. É só falar "Hey Jarvis".
+reator respirando. É só falar "Jarvis".
 
 ## O que dá pra pedir hoje
 
@@ -32,7 +35,12 @@ reator respirando. É só falar "Hey Jarvis".
 - "qual a temperatura?"
 - Qualquer outra pergunta vai pra IA e volta falada.
 
-No celular e no relógio também dá pra **tocar no reator** pra falar sem wake word.
+No celular e no relógio também dá pra **tocar no reator** pra falar sem chamar pelo nome.
+
+## A voz
+
+A voz do JARVIS é clonada da amostra em `server/data/voice/jarvis_ref.wav`, gerada na sua
+GPU. Pra trocar por outra amostra, veja [docs/VOZ.md](docs/VOZ.md).
 
 ## Configurar a casa de verdade
 

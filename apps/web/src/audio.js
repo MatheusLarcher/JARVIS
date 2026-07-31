@@ -88,7 +88,7 @@ export function createPlayer() {
     for (const a of list) {
       try {
         const buf = await (await fetch(a.url)).arrayBuffer()
-        acks.push(await ctx.decodeAudioData(buf))
+        acks.push(await ctx.decodeAudioData(buf))   // mp3 ou wav, o decoder resolve
       } catch { /* segue com os que carregarem */ }
     }
   }

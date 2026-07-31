@@ -116,6 +116,8 @@ class WearActivity : ComponentActivity(), JarvisClient.Listener {
 
     override fun onWake() { /* wake word não roda no relógio */ }
 
+    override fun onAck() = runOnUiThread { audio.playAck() }
+
     override fun onState(state: String) = runOnUiThread {
         uiState.value = state
         if (state == "IDLE") stopTalking()

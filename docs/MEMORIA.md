@@ -36,6 +36,45 @@ wake "Hey Jarvis" → ack local → "liga a luz da sala" → Nemotron transcreve
   browser depende). Dev do Electron usa userData em %TEMP%\jarvis-desktop-dev pra não
   brigar com a instância instalada (cache lock = exit -1 imediato).
 
+## Voz clonada (2026-07-31)
+
+Voz do JARVIS = clonagem por referência (Chatterbox multilíngue, GPU). Detalhes em
+[VOZ.md](VOZ.md). Serviço na 8041, env `jarvis-tts` separado. Biblioteca inteira regerada
+com `--verify` (14/14 com WER 0.00). Similaridade de locutor: clonada 0.58–0.76 vs voz
+antiga (edge-tts) 0.45.
+
+Aprendizados:
+- `VoiceEncoder()` puro = pesos ALEATÓRIOS → similaridade falsa de 1.000 pra tudo. Usar
+  `model.ve` (encoder treinado de dentro do Chatterbox).
+- Chatterbox pina torch 2.6; instalar torch cu128 POR CIMA (aviso do pip é esperado).
+  Instalação interrompida corrompe o sympy — limpar `~*` do site-packages e reinstalar.
+- torchaudio novo exige torchcodec pra salvar → usar `soundfile`.
+- Frase muito curta ("Sim?") sai ininteligível às vezes → `build_library.py --verify`
+  gera N tomadas e escolhe pela transcrição do próprio STT.
+- A mesma frase em dois intents ("Pronto.") compartilha o hash do cache: sem reuso, a
+  segunda geração sobrescrevia a tomada boa da primeira.
+- RTF ~4 (lento) → biblioteca pré-gerada + cache + `tts/warmer.py` (mantém a frase da hora
+  atual sempre pronta, e só roda quando ninguém está falando — ver `jarvis/activity.py`).
+
+## Wake word "Jarvis" + comando na mesma frase (2026-07-31)
+
+Reescrita do `audio/pipeline.py`: a palavra-chave agora é reconhecida na TRANSCRIÇÃO
+(`wake_word.engine: stt`), não por modelo de wake word. Fases IDLE → SCANNING → COMMAND,
+com pre-roll de 1s pra não perder o começo da frase. Eventos `wake` (acende) e `ack`
+(toca "Sim?") são SEPARADOS — quem emenda o comando não ouve o "Sim?" por cima.
+Match por distância de edição (`audio/wakeword.py`) porque o STT escreve "jarves"/"javis".
+Latência medida: reator acende ~1,1s depois de começar a falar.
+
+Bugs encontrados e corrigidos nessa rodada (todos reais, pegos no E2E):
+- **STT não é thread-safe**: duas conexões transcrevendo juntas (o app da bandeja com mic
+  real + o teste) devolviam transcrição VAZIA. Corrigido com `threading.Lock` no
+  `NemotronStt.transcribe`.
+- Alimentar o pre-roll com `feed()` disparava transcrição DENTRO do event loop e travava o
+  servidor (keepalive ping timeout). Criado `SttStream.prime()`, que só acumula.
+- Na fase COMMAND o silêncio pós-"Jarvis" encerrava a captura antes da pessoa falar →
+  só encerrar por silêncio depois que houve fala (`_speech_seen`).
+- Ruído solto acionava o STT à toa → exigir fala contínua (`vad.min_speech_ms`, 240ms).
+
 ## Decisões e aprendizados importantes
 
 - **Wake word e VAD são STATEFUL → uma instância POR CONEXÃO** (`AudioPipeline.init()`).
@@ -62,7 +101,10 @@ wake "Hey Jarvis" → ack local → "liga a luz da sala" → Nemotron transcreve
 ## Pendências / próximos passos
 
 - [ ] Conectar Home Assistant REAL (falta URL + token do Matheus; modo mock ativo).
-- [ ] Testar wake word com a voz real do Matheus e calibrar threshold.
+- [ ] Testar o wake com a voz real do Matheus e calibrar (`fuzzy_max_edits`,
+      `vad.min_speech_ms`). Observado no log: o app da bandeja com mic real chegou a
+      registrar um "chamou: 'Jarvis.'" sem ninguém falar — se acontecer muito, subir
+      `min_speech_ms` ou baixar `fuzzy_max_edits` pra 1.
 - [ ] Instalar APK no tablet/celular/relógio reais (wear não foi testado em emulador Wear).
 - [ ] Voz definitiva do TTS (hoje edge-tts AntonioNeural; ideia: Chatterbox/voz clonada).
 - [ ] Cloudflare Tunnel `jarvis.larchertech.com` pra acesso externo.

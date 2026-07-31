@@ -7,15 +7,26 @@ audio:
   frame_ms: 80
 
 wake_word:
-  engine: openwakeword
-  model: hey_jarvis
+  # stt = a palavra-chave e reconhecida na propria transcricao, entao da pra falar
+  #       "Jarvis, liga a luz" tudo junto e o comando ja vai na mesma frase.
+  #       O openwakeword continua ligado em paralelo como atalho instantaneo.
+  engine: stt                  # stt | openwakeword
+  keyword: jarvis
+  fuzzy_max_edits: 2           # tolera "jarves", "javis", "jarvez"...
+  openwakeword_model: hey_jarvis
   threshold: 0.4
   # depois de um wake, ignora novos wakes por N segundos
   refractory_s: 2.0
+  # quanto de audio anterior ao inicio da fala entra no reconhecimento (s)
+  preroll_s: 1.0
+  # se so chamou o nome, espera o comando por ate N segundos
+  followup_s: 6.0
 
 vad:
   engine: silero
   threshold: 0.5
+  # fala continua minima pra acionar o STT (evita transcrever ruido solto)
+  min_speech_ms: 240
   # silencio (s) que encerra a fala
   end_silence_s: 0.8
   # tempo maximo ouvindo depois do wake (s)
@@ -29,9 +40,18 @@ stt:
   device: cuda
 
 tts:
-  engine: edge              # edge | dummy
   voice_profiles:
+    # voz clonada do JARVIS (referencia em server/data/voice/jarvis_ref.wav)
     jarvis_br:
+      engine: clone
+      service_url: http://127.0.0.1:8041
+      language: pt
+      exaggeration: 0.5
+      cfg_weight: 0.5     # abaixo de 0.3 o Chatterbox quebra
+      temperature: 0.7
+      timeout_s: 120
+      fallback: jarvis_edge   # se o servico de voz estiver fora
+    jarvis_edge:
       engine: edge
       voice: pt-BR-AntonioNeural
       rate: "+10%"
@@ -39,6 +59,8 @@ tts:
   default_profile: jarvis_br
   cache_dir: server/data/tts_cache
   library_dir: server/data/library
+  # mantem sempre no cache as frases previsiveis (hora/temperatura)
+  cache_warmer: true
 
 llm:
   # LiteLLM model string - trocavel sem tocar codigo

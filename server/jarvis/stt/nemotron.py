@@ -7,6 +7,7 @@ interface quando validada.
 """
 import asyncio
 import logging
+import threading
 import time
 
 import numpy as np
@@ -16,7 +17,8 @@ from .base import SttEngine, SttStream
 
 log = logging.getLogger("jarvis.stt")
 
-PARTIAL_INTERVAL_S = 0.8
+# parcial rápido: é ele que faz o reator acender ao ouvir "Jarvis"
+PARTIAL_INTERVAL_S = 0.45
 
 
 class NemotronStream(SttStream):
@@ -29,10 +31,15 @@ class NemotronStream(SttStream):
         pcm = np.concatenate(self.buf) if self.buf else np.zeros(0, dtype=np.int16)
         return pcm.astype(np.float32) / 32768.0
 
+    def prime(self, pcm: np.ndarray) -> None:
+        """Só guarda — transcrever aqui bloquearia o event loop."""
+        self.buf.append(pcm)
+
     def feed(self, pcm: np.ndarray) -> str | None:
         self.buf.append(pcm)
         now = time.monotonic()
-        if now - self._last_partial_t >= PARTIAL_INTERVAL_S and sum(len(b) for b in self.buf) > 8000:
+        # 4800 amostras = 300ms: já dá pra reconhecer a palavra-chave
+        if now - self._last_partial_t >= PARTIAL_INTERVAL_S and sum(len(b) for b in self.buf) > 4800:
             self._last_partial_t = now
             return self.engine.transcribe(self._audio())
         return None
@@ -47,7 +54,9 @@ class NemotronStt(SttEngine):
     def __init__(self):
         self.model = None
         self.lang = config.settings["stt"].get("language", "pt-BR")
-        self._lock = asyncio.Lock()
+        # o modelo é único e compartilhado por todos os dispositivos, mas NÃO é
+        # thread-safe: duas transcrições ao mesmo tempo saem vazias/corrompidas
+        self._infer_lock = threading.Lock()
 
     async def load(self):
         loop = asyncio.get_running_loop()
@@ -70,10 +79,11 @@ class NemotronStt(SttEngine):
             return None
         try:
             kwargs = {"verbose": False}
-            try:
-                out = self.model.transcribe([audio_f32], target_lang=self.lang, **kwargs)
-            except TypeError:
-                out = self.model.transcribe([audio_f32], **kwargs)
+            with self._infer_lock:
+                try:
+                    out = self.model.transcribe([audio_f32], target_lang=self.lang, **kwargs)
+                except TypeError:
+                    out = self.model.transcribe([audio_f32], **kwargs)
             if not out:
                 return None
             first = out[0]

@@ -22,7 +22,8 @@ Autenticação: token do device (`config/devices.yml`). Token errado → handsha
 | type | campos | uso |
 |---|---|---|
 | `hello_ok` | `context`, `ack_sounds[]` | confirma registro; device baixa e cacheia os acks |
-| `wake` | — | wake word detectada → acender reator + tocar ack LOCAL |
+| `wake` | — | chamaram o JARVIS → **só acende o reator** |
+| `ack` | — | tocar o áudio de confirmação LOCAL ("Sim?"). Não vem quando o comando foi dito na mesma frase |
 | `state` | `state` = IDLE/LISTENING/THINKING/EXECUTING/DONE/ERROR | dirige a UI |
 | `stt_partial` / `stt_final` | `text` | transcrição |
 | `speak` | `text`, `audio_url` | resposta falada (URL relativa ao servidor) |

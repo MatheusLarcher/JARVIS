@@ -5,6 +5,10 @@ import numpy as np
 class SttStream:
     """Uma elocução. Recebe PCM int16 16kHz em pedaços e emite parciais/final."""
 
+    def prime(self, pcm: np.ndarray) -> None:
+        """Enfileira áudio SEM transcrever (usado pro pre-roll, no event loop)."""
+        raise NotImplementedError
+
     def feed(self, pcm: np.ndarray) -> str | None:
         """Alimenta áudio; retorna transcrição parcial quando houver novidade."""
         raise NotImplementedError

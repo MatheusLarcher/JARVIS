@@ -33,8 +33,9 @@ Resposta volta pro MESMO dispositivo que iniciou (roteável no futuro)
 
 | Decisão | Escolha | Motivo |
 |---|---|---|
-| Wake word | **openWakeWord (modelo `hey_jarvis`) no SERVIDOR** | Device streama áudio contínuo pela LAN (frames de 80ms); ida+volta na LAN < 50ms, dentro da meta de 100–300ms. Mantém os apps finos. Interface `WakeWordEngine` permite mover pra on-device depois. |
-| Ack instantâneo | Wavs de confirmação **baixados e cacheados no device** no registro | No evento `wake`, o device acende o reator e toca `sim_01.wav` local — zero rede/LLM/TTS no caminho. |
+| Wake word | **reconhecida na própria transcrição** (`wake_word.engine: stt`) | A palavra é só "Jarvis" e o comando pode vir na MESMA frase ("Jarvis, liga a luz"). O VAD acusa fala → o STT transcreve com pre-roll → a parcial contendo "Jarvis" acende o reator na hora e o resto da frase vira o comando. Comparação por distância de edição, porque o STT escreve "jarves"/"javis". openWakeWord (`hey_jarvis`) segue ativo em paralelo como atalho instantâneo. |
+| Ack instantâneo | Wavs de confirmação **baixados e cacheados no device** no registro | `wake` acende o reator; `ack` toca o "Sim?" local (zero rede/LLM/TTS). São eventos separados de propósito: quem emenda "Jarvis, liga a luz" numa frase só **não** ouve o "Sim?" atravessado — o Jarvis já responde o comando. |
+| Voz | **clonada por referência** (Chatterbox multilíngue na GPU, serviço à parte na 8041) | Ver [VOZ.md](VOZ.md). Geração é lenta (RTF ~4), então biblioteca pré-gerada + cache + aquecedor cobrem o uso normal. |
 | Áudio | PCM 16 kHz mono 16-bit, frames binários de 80ms via WebSocket | Simples, latência baixa na LAN; WebRTC descartado no MVP (complexidade sem ganho em rede local). |
 | STT | `nvidia/nemotron-3.5-asr-streaming-0.6b` (NeMo, cache-aware, GPU) | Streaming real (chunks 80–1120ms), 40 idiomas incl. PT. Abstração `SttEngine`; fallbacks: Parakeet TDT (transformers) e faster-whisper. |
 | TTS | Interface `TtsEngine` + cache por hash(frase+voz). MVP: edge-tts `pt-BR-AntonioNeural` (perfil `jarvis_br`) | Voz definitiva vem depois; cache e biblioteca prontos independem do motor. |

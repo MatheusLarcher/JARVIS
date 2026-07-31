@@ -1,7 +1,21 @@
-"""Pipeline de áudio por dispositivo: wake word → VAD → STT streaming.
+"""Pipeline de áudio por dispositivo: VAD → STT streaming → palavra-chave → comando.
 
-Recebe frames PCM int16 16kHz do WebSocket e dispara callbacks async:
-  on_wake(), on_partial(texto), on_final(texto), on_timeout()
+Como funciona (modo `stt`, o padrão):
+
+  IDLE      guarda um pre-roll curto e espera o VAD acusar fala.
+  SCANNING  transcreve a fala desde o começo (graças ao pre-roll) procurando
+            "jarvis" nas parciais. Assim que aparece, o reator já acende.
+            No fim da fala, o que veio junto com o nome VIRA O COMANDO —
+            é o que permite dizer "Jarvis, liga a luz" numa frase só.
+            Se a fala não tinha o nome, é descartada em silêncio.
+  COMMAND   quando a pessoa só chamou ("Jarvis"), toca o "Sim?" e ouve a
+            próxima fala inteira como comando (sem exigir o nome de novo).
+  BUSY      executando; áudio ignorado.
+
+O openWakeWord continua rodando em paralelo como atalho instantâneo pra
+"hey jarvis" — o que disparar primeiro vence.
+
+Callbacks: on_wake(), on_ack(), on_partial(txt), on_final(txt), on_timeout()
 """
 import asyncio
 import logging
@@ -11,6 +25,7 @@ from enum import Enum
 import numpy as np
 
 from ..config import config
+from .wakeword import matcher
 
 log = logging.getLogger("jarvis.audio")
 
@@ -36,7 +51,7 @@ class Shared:
     @classmethod
     def _prefetch(cls):
         import openwakeword
-        openwakeword.utils.download_models(["hey_jarvis"])
+        openwakeword.utils.download_models([config.settings["wake_word"]["openwakeword_model"]])
         from silero_vad import load_silero_vad
         load_silero_vad()  # aquece o cache do torch.hub
         log.info("modelos de wake word + VAD disponíveis")
@@ -44,7 +59,8 @@ class Shared:
     @staticmethod
     def new_wake_model():
         from openwakeword.model import Model
-        return Model(wakeword_models=["hey_jarvis"], inference_framework="onnx")
+        return Model(wakeword_models=[config.settings["wake_word"]["openwakeword_model"]],
+                     inference_framework="onnx")
 
     @staticmethod
     def new_vad_model():
@@ -54,32 +70,45 @@ class Shared:
 
 class Phase(str, Enum):
     IDLE = "idle"
-    LISTENING = "listening"
-    BUSY = "busy"          # processando comando; áudio é ignorado
+    SCANNING = "scanning"    # ouvindo, ainda não sei se falaram comigo
+    COMMAND = "command"      # já chamou; esta fala é o comando
+    BUSY = "busy"
 
 
 class AudioPipeline:
-    def __init__(self, device_id: str, on_wake, on_partial, on_final, on_timeout):
+    def __init__(self, device_id, on_wake, on_ack, on_partial, on_final, on_timeout):
         self.device_id = device_id
-        self.on_wake, self.on_partial, self.on_final, self.on_timeout = \
-            on_wake, on_partial, on_final, on_timeout
+        self.on_wake, self.on_ack = on_wake, on_ack
+        self.on_partial, self.on_final, self.on_timeout = on_partial, on_final, on_timeout
+
+        cfg = config.settings
+        self.mode = cfg["wake_word"].get("engine", "stt")
+        self._wake_threshold = cfg["wake_word"]["threshold"]
+        self._refractory = cfg["wake_word"]["refractory_s"]
+        self._preroll_n = int(SAMPLE_RATE * cfg["wake_word"].get("preroll_s", 1.0))
+        self._followup_s = cfg["wake_word"].get("followup_s", 6.0)
+        self._end_silence = cfg["vad"]["end_silence_s"]
+        self._max_utt = cfg["vad"]["max_utterance_s"]
+        self._vad_threshold = cfg["vad"]["threshold"]
+
         self.phase = Phase.IDLE
+        self.wake_model = None
+        self.vad_model = None
+        self._lock = asyncio.Lock()
+
+        self._preroll = np.zeros(0, dtype=np.int16)
         self._wake_buf = np.zeros(0, dtype=np.int16)
         self._vad_buf = np.zeros(0, dtype=np.int16)
         self._stt_stream = None
         self._last_wake_t = 0.0
-        self._listen_start = 0.0
-        self._speech_seen = False
+        self._speech_start = 0.0
         self._silence_start: float | None = None
-        cfg = config.settings
-        self._wake_threshold = cfg["wake_word"]["threshold"]
-        self._refractory = cfg["wake_word"]["refractory_s"]
-        self._end_silence = cfg["vad"]["end_silence_s"]
-        self._max_utt = cfg["vad"]["max_utterance_s"]
-        self._vad_threshold = cfg["vad"]["threshold"]
-        self._lock = asyncio.Lock()
-        self.wake_model = None
-        self.vad_model = None
+        self._speech_seen = False
+        self._woke_in_this_utterance = False
+        self._await_until = 0.0
+        self._speech_frames = 0
+        # ~240ms de fala contínua antes de acionar o STT
+        self._min_speech_frames = max(1, int(cfg["vad"].get("min_speech_ms", 240) / 80))
 
     async def init(self):
         """Cria os modelos stateful desta conexão (fora do event loop)."""
@@ -87,90 +116,172 @@ class AudioPipeline:
         self.wake_model, self.vad_model = await loop.run_in_executor(
             None, lambda: (Shared.new_wake_model(), Shared.new_vad_model()))
 
+    # ------------------------------------------------------------------ entrada
     async def feed(self, pcm_bytes: bytes):
         pcm = np.frombuffer(pcm_bytes, dtype=np.int16)
         async with self._lock:
+            if self.phase == Phase.BUSY:
+                return
             if self.phase == Phase.IDLE:
-                await self._feed_wake(pcm)
-            elif self.phase == Phase.LISTENING:
-                await self._feed_listen(pcm)
-            # BUSY: descarta
+                await self._feed_idle(pcm)
+            else:
+                await self._feed_utterance(pcm)
 
-    async def start_listening(self, from_wake: bool = False):
-        """Entra em captura (chamado pelo wake ou por push-to-talk do watch)."""
-        self.phase = Phase.LISTENING
+    def _vad_prob(self, pcm: np.ndarray) -> float:
+        import torch
+        self._vad_buf = np.concatenate([self._vad_buf, pcm])
+        prob = 0.0
+        while len(self._vad_buf) >= VAD_FRAME:
+            win, self._vad_buf = self._vad_buf[:VAD_FRAME], self._vad_buf[VAD_FRAME:]
+            t = torch.from_numpy(win.astype(np.float32) / 32768.0)
+            prob = max(prob, float(self.vad_model(t, SAMPLE_RATE).item()))
+        return prob
+
+    async def _feed_idle(self, pcm: np.ndarray):
+        now = time.monotonic()
+
+        # atalho: openWakeWord ("hey jarvis") responde na hora
+        if self.wake_model is not None:
+            self._wake_buf = np.concatenate([self._wake_buf, pcm])
+            while len(self._wake_buf) >= WAKE_FRAME:
+                frame, self._wake_buf = self._wake_buf[:WAKE_FRAME], self._wake_buf[WAKE_FRAME:]
+                scores = self.wake_model.predict(frame)
+                if scores and max(scores.values()) >= self._wake_threshold \
+                        and now - self._last_wake_t > self._refractory:
+                    self._last_wake_t = now
+                    log.info("[%s] wake word (openWakeWord)", self.device_id)
+                    await self.on_wake()
+                    await self.on_ack()
+                    self._begin_utterance(Phase.COMMAND, preroll=False)
+                    return
+
+        # pre-roll: guarda o áudio recente pra não perder o começo da frase
+        self._preroll = np.concatenate([self._preroll, pcm])[-self._preroll_n:]
+
+        if self.mode != "stt":
+            return
+        # exige fala SUSTENTADA: um ruído isolado não vale a pena transcrever
+        if self._vad_prob(pcm) >= self._vad_threshold:
+            self._speech_frames += 1
+        else:
+            self._speech_frames = 0
+        if self._speech_frames >= self._min_speech_frames:
+            log.debug("[%s] fala detectada; transcrevendo pra ver se é comigo", self.device_id)
+            self._begin_utterance(Phase.SCANNING, preroll=True)
+
+    def _begin_utterance(self, phase: Phase, preroll: bool):
+        self.phase = phase
         self._stt_stream = Shared.stt_engine.new_stream()
-        self._listen_start = time.monotonic()
-        self._speech_seen = False
-        self._silence_start = None
+        if preroll and len(self._preroll):
+            self._stt_stream.prime(self._preroll)   # sem transcrever: estamos no event loop
+        self._preroll = np.zeros(0, dtype=np.int16)
+        self._wake_buf = np.zeros(0, dtype=np.int16)
         self._vad_buf = np.zeros(0, dtype=np.int16)
+        self._speech_start = time.monotonic()
+        self._silence_start = None
+        # em SCANNING o VAD já acusou fala; em COMMAND ainda vamos esperar a pessoa falar
+        self._speech_seen = phase == Phase.SCANNING
+        self._woke_in_this_utterance = False
+        self._await_until = time.monotonic() + self._followup_s
         if self.wake_model:
             self.wake_model.reset()
+
+    async def _feed_utterance(self, pcm: np.ndarray):
+        loop = asyncio.get_running_loop()
+        now = time.monotonic()
+
+        speaking = self._vad_prob(pcm) >= self._vad_threshold
+        if speaking:
+            self._speech_seen = True
+            self._silence_start = None
+            self._await_until = now + self._followup_s
+        elif self._speech_seen and self._silence_start is None:
+            self._silence_start = now
+
+        partial = await loop.run_in_executor(None, self._stt_stream.feed, pcm)
+        if partial:
+            if self.phase == Phase.SCANNING:
+                # acende o reator assim que o nome aparece, sem esperar a frase acabar
+                hit, _ = matcher.match(partial)
+                if hit and not self._woke_in_this_utterance:
+                    self._woke_in_this_utterance = True
+                    self._last_wake_t = now
+                    log.info("[%s] chamou: %r", self.device_id, partial)
+                    await self.on_wake()
+                if self._woke_in_this_utterance:
+                    await self.on_partial(partial)
+            else:
+                await self.on_partial(partial)
+
+        # o silêncio só encerra depois que a pessoa realmente falou — senão a
+        # pausa entre o "Jarvis" e o comando cortaria a captura na hora
+        silence = (self._speech_seen and self._silence_start is not None
+                   and now - self._silence_start >= self._end_silence)
+        too_long = self._speech_seen and now - self._speech_start >= self._max_utt
+        gave_up = self.phase == Phase.COMMAND and now >= self._await_until
+
+        if silence or too_long:
+            await self._end_utterance()
+        elif gave_up:
+            self._reset_idle()
+            await self.on_timeout()
+
+    async def _end_utterance(self):
+        loop = asyncio.get_running_loop()
+        stream = self._stt_stream
+        phase = self.phase
+        self.phase = Phase.BUSY
+        self._stt_stream = None
+
+        text = (await loop.run_in_executor(None, stream.finish) or "").strip()
+        log.info("[%s] fala: %r (fase=%s)", self.device_id, text, phase.value)
+
+        if phase == Phase.COMMAND:
+            if text:
+                await self.on_final(text)
+            else:
+                self._reset_idle()
+                await self.on_timeout()
+            return
+
+        # SCANNING: só interessa se falaram comigo
+        hit, command = matcher.match(text)
+        if not hit:
+            if self._woke_in_this_utterance:      # parcial enganou; volta ao repouso
+                self._reset_idle()
+                await self.on_timeout()
+            else:
+                self._reset_idle()
+            return
+
+        if not self._woke_in_this_utterance:      # nome só apareceu no texto final
+            await self.on_wake()
+
+        if command:
+            await self.on_final(command)          # comando veio na mesma frase
+        else:
+            await self.on_ack()                   # só chamou: responde e espera
+            self._begin_utterance(Phase.COMMAND, preroll=False)
+
+    # ------------------------------------------------------------------ estado
+    def _reset_idle(self):
+        self.phase = Phase.IDLE
+        self._stt_stream = None
+        self._preroll = np.zeros(0, dtype=np.int16)
+        self._wake_buf = np.zeros(0, dtype=np.int16)
+        self._vad_buf = np.zeros(0, dtype=np.int16)
+        self._woke_in_this_utterance = False
+        self._speech_frames = 0
+        if self.wake_model:
+            self.wake_model.reset()
+
+    async def start_listening(self):
+        """Push-to-talk: ouvir o comando direto, sem palavra-chave."""
+        self._begin_utterance(Phase.COMMAND, preroll=False)
 
     def set_busy(self):
         self.phase = Phase.BUSY
         self._stt_stream = None
 
     def set_idle(self):
-        self.phase = Phase.IDLE
-        self._stt_stream = None
-        self._wake_buf = np.zeros(0, dtype=np.int16)
-
-    async def _feed_wake(self, pcm: np.ndarray):
-        if self.wake_model is None:
-            return
-        self._wake_buf = np.concatenate([self._wake_buf, pcm])
-        while len(self._wake_buf) >= WAKE_FRAME:
-            frame, self._wake_buf = self._wake_buf[:WAKE_FRAME], self._wake_buf[WAKE_FRAME:]
-            scores = self.wake_model.predict(frame)
-            score = max(scores.values()) if scores else 0.0
-            now = time.monotonic()
-            if score >= self._wake_threshold and now - self._last_wake_t > self._refractory:
-                self._last_wake_t = now
-                log.info("[%s] wake word (score=%.2f)", self.device_id, score)
-                await self.start_listening(from_wake=True)
-                await self.on_wake()
-                return
-
-    async def _feed_listen(self, pcm: np.ndarray):
-        import torch
-        loop = asyncio.get_running_loop()
-        now = time.monotonic()
-
-        # VAD em janelas de 512 amostras
-        self._vad_buf = np.concatenate([self._vad_buf, pcm])
-        speech_prob = 0.0
-        while len(self._vad_buf) >= VAD_FRAME:
-            win, self._vad_buf = self._vad_buf[:VAD_FRAME], self._vad_buf[VAD_FRAME:]
-            t = torch.from_numpy(win.astype(np.float32) / 32768.0)
-            speech_prob = max(speech_prob, float(self.vad_model(t, SAMPLE_RATE).item()))
-
-        if speech_prob >= self._vad_threshold:
-            self._speech_seen = True
-            self._silence_start = None
-        elif self._speech_seen and self._silence_start is None:
-            self._silence_start = now
-
-        # STT (parciais rodam fora do event loop)
-        partial = await loop.run_in_executor(None, self._stt_stream.feed, pcm)
-        if partial:
-            await self.on_partial(partial)
-
-        ended_by_silence = (self._silence_start is not None
-                            and now - self._silence_start >= self._end_silence)
-        timed_out = now - self._listen_start >= self._max_utt
-        no_speech_timeout = (not self._speech_seen
-                             and now - self._listen_start >= min(5.0, self._max_utt))
-
-        if ended_by_silence or timed_out:
-            stream = self._stt_stream
-            self.set_busy()
-            final = await loop.run_in_executor(None, stream.finish)
-            log.info("[%s] final: %r", self.device_id, final)
-            if final.strip():
-                await self.on_final(final.strip())
-            else:
-                await self.on_timeout()
-        elif no_speech_timeout:
-            self.set_idle()
-            await self.on_timeout()
+        self._reset_idle()

@@ -129,10 +129,13 @@ class MainActivity : ComponentActivity(), JarvisClient.Listener {
     }
 
     override fun onWake() = runOnUiThread {
-        audio.playAck()                       // resposta local instantânea
         uiHeard.value = ""; uiAnswer.value = ""
-        setBrightness(true)
+        setBrightness(true)                   // reator acende na hora
     }
+
+    // só toca quando a pessoa chamou e parou; se o comando veio na mesma
+    // frase, o servidor não manda ack e o Jarvis já responde direto
+    override fun onAck() = runOnUiThread { audio.playAck() }
 
     override fun onState(state: String) = runOnUiThread {
         uiState.value = state

@@ -8,6 +8,9 @@ class DummyStream(SttStream):
     def __init__(self):
         self.samples = 0
 
+    def prime(self, pcm: np.ndarray) -> None:
+        self.samples += len(pcm)
+
     def feed(self, pcm: np.ndarray) -> str | None:
         self.samples += len(pcm)
         return None

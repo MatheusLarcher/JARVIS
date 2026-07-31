@@ -58,7 +58,29 @@ vira um `MCPToolset` do agente ADK (carregado em `server/jarvis/mcp/loader.py`).
 
 ## Wake word
 
-Servidor usa openWakeWord `hey_jarvis` (threshold em `settings.yml`). Dizer **"Hey Jarvis"**
-funciona melhor que só "Jarvis" (o modelo foi treinado com a frase completa, em inglês).
-Pra um modelo custom "Jarvis" PT-BR: treinar com openWakeWord (dados sintéticos) e trocar
-o nome do modelo em `audio/pipeline.py`/`settings.yml`.
+Padrão: `wake_word.engine: stt` — a palavra-chave é reconhecida na própria transcrição.
+Fale **"Jarvis"** e, se quiser, emende o comando na mesma frase:
+
+```
+"Jarvis"                      → toca "Sim?" e fica ouvindo o comando
+"Jarvis, liga a luz da sala"  → executa direto, sem o "Sim?" no meio
+"Liga a luz da sala, Jarvis"  → também funciona (nome no fim)
+```
+
+Peças: `audio/wakeword.py` (match por distância de edição, tolera "jarves"/"javis") e
+`audio/pipeline.py` (pre-roll + fases IDLE → SCANNING → COMMAND).
+
+Ajustes em `config/settings.yml`:
+
+| Chave | Pra quê |
+|---|---|
+| `wake_word.keyword` | trocar o nome do assistente |
+| `wake_word.fuzzy_max_edits` | mais alto = reconhece mais fácil, mas dispara à toa |
+| `wake_word.preroll_s` | quanto de áudio antes da fala entra no reconhecimento |
+| `wake_word.followup_s` | quanto espera o comando depois do "Sim?" |
+| `vad.min_speech_ms` | fala contínua mínima pra acionar o STT (filtra ruído) |
+
+Teste sem microfone: `python tests/test_wakeword.py` (frases → comando extraído).
+
+O openWakeWord (`hey_jarvis`) continua ligado em paralelo: dizer "Hey Jarvis" dispara pelo
+caminho instantâneo. Pra usar só ele, `wake_word.engine: openwakeword`.

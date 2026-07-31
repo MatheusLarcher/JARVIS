@@ -20,6 +20,7 @@ class JarvisClient(
         fun onConnected(ackSounds: List<Pair<String, String>>)
         fun onDisconnected()
         fun onWake()
+        fun onAck()
         fun onState(state: String)
         fun onTranscript(text: String, final: Boolean)
         fun onSpeak(text: String, audioUrl: String?)
@@ -98,6 +99,7 @@ class JarvisClient(
                 listener.onConnected(acks)
             }
             "wake" -> listener.onWake()
+            "ack" -> listener.onAck()
             "state" -> listener.onState(msg.optString("state", "IDLE"))
             "stt_partial" -> listener.onTranscript(msg.optString("text"), false)
             "stt_final" -> listener.onTranscript(msg.optString("text"), true)

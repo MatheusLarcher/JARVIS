@@ -8,6 +8,7 @@ import logging
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from .. import activity
 from ..audio.pipeline import AudioPipeline
 from ..config import config
 from ..context.engine import context_engine
@@ -45,10 +46,16 @@ async def ws_device(websocket: WebSocket, device_id: str, token: str | None = No
     dialog = DialogManager(device_id, send)
 
     async def on_wake():
+        activity.begin()
         dialog.start_interaction()
-        # o device acende o reator e toca o ack local ao receber isto
+        # só acende o reator; o "Sim?" vem no ack (pode nem vir, se o comando
+        # tiver sido dito na mesma frase)
         await send({"type": "wake"})
         await send({"type": "state", "state": "LISTENING"})
+
+    async def on_ack():
+        # device toca um áudio de confirmação já cacheado localmente
+        await send({"type": "ack"})
 
     async def on_partial(text: str):
         # marca só o PRIMEIRO parcial: é a latência percebida de feedback
@@ -57,15 +64,19 @@ async def ws_device(websocket: WebSocket, device_id: str, token: str | None = No
         await send({"type": "stt_partial", "text": text})
 
     async def on_final(text: str):
-        await dialog.on_final(text)
+        try:
+            await dialog.on_final(text)
+        finally:
+            activity.end()
         pipeline.set_idle()
         await send({"type": "state", "state": "IDLE"})
 
     async def on_timeout():
+        activity.end()
         pipeline.set_idle()
         await dialog.on_timeout()
 
-    pipeline = AudioPipeline(device_id, on_wake, on_partial, on_final, on_timeout)
+    pipeline = AudioPipeline(device_id, on_wake, on_ack, on_partial, on_final, on_timeout)
     await pipeline.init()
 
     ambient_task = asyncio.create_task(_ambient_loop(send))
@@ -100,6 +111,7 @@ async def _handle_json(device_id: str, msg: dict, send, pipeline: AudioPipeline,
         context_engine.update(device_id, msg)
     elif t == "mic_open":
         # push-to-talk (watch/celular): começa a ouvir sem wake word
+        activity.begin()
         dialog.start_interaction()
         await pipeline.start_listening()
         await send({"type": "state", "state": "LISTENING"})

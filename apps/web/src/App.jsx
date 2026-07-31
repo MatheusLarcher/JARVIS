@@ -108,8 +108,9 @@ export default function App() {
       if (msg.type === 'hello_ok') playerRef.current?.preloadAcks(msg.ack_sounds || [])
       else if (msg.type === 'wake') {
         setHeard(''); setAnswer('')
-        window.jarvisDesktop?.wake()
-        playerRef.current?.playAck()          // resposta local instantânea
+        window.jarvisDesktop?.wake()          // só acende o reator
+      } else if (msg.type === 'ack') {
+        playerRef.current?.playAck()          // "Sim?" local, sem rede nem LLM
       } else if (msg.type === 'state') {
         window.jarvisDesktop?.state(msg.state)
         setState(msg.state === 'IDLE' ? 'IDLE' : msg.state)

@@ -1,4 +1,5 @@
 """Montagem do app FastAPI do JARVIS."""
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -7,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from .audio.pipeline import Shared
-from .config import ROOT
+from .config import ROOT, config
 from .gateway import rest, ws
 from .home_assistant.client import ha
 from .memory.db import store
@@ -22,8 +23,14 @@ async def lifespan(app: FastAPI):
     await store.open()
     await ha.start()
     await Shared.load()
+    warm_task = None
+    if config.settings["tts"].get("cache_warmer"):
+        from .tts.warmer import run as warm_run
+        warm_task = asyncio.create_task(warm_run())
     log.info("JARVIS online.")
     yield
+    if warm_task:
+        warm_task.cancel()
     await ha.stop()
     await store.close()
 
