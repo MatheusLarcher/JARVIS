@@ -19,6 +19,15 @@ wake "Hey Jarvis" → ack local → "liga a luz da sala" → Nemotron transcreve
   `releases/Jarvis-Watch.apk` (keystore `jarvis-release.keystore`, senha `jarvis2026`).
   App validado no emulador (setup → conexão → ambient → tap-to-talk → estados → reconexão).
 - **LLM:** DeepSeek via ADK+LiteLlm funcionando (chave em `config/.env`), com tool de luz.
+- **Desktop (bandeja):** `apps/desktop` (Electron). Tray oculto + mic em background; a janela
+  (card 460x520 frameless/transparente, mesma UI web com `?desktop=1&device=pc-matheus`)
+  aparece no wake (`showInactive`, sem roubar foco) e some 3s após IDLE; ESC/clique na bandeja
+  também controla. Instalador NSIS em `releases/JARVIS-Desktop-Setup.exe`; instalado em
+  `%LOCALAPPDATA%\Programs\jarvis-desktop\JARVIS.exe`, login item automático. Config em
+  `%APPDATA%\jarvis-desktop\config.json` (token cai pro devices.yml do repo — dev por
+  __dirname, instalado por ~/Documents/GitHub/JARVIS). Validado: EXE instalado conecta
+  como pc-matheus; wake acústico REAL não foi testável aqui (saída padrão = Astro A50,
+  o som de teste não passou pelo mic) — testar falando de verdade.
 
 ## Decisões e aprendizados importantes
 

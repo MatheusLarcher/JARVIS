@@ -2,8 +2,11 @@ import React, { useEffect, useRef, useState } from 'react'
 import { createPlayer, startMic } from './audio.js'
 import { createReactor } from './reactor.js'
 
-const DEVICE_ID = localStorage.getItem('jarvis_device') || 'web-dev'
-const TOKEN = localStorage.getItem('jarvis_token') || 'tk_web_3Za5Xb7Vc9Td1Rf4Pg6Nh8Lj2'
+const params = new URLSearchParams(location.search)
+// modo desktop: janela Electron da bandeja — auto-inicia e avisa o main pra mostrar/esconder
+const DESKTOP = params.get('desktop') === '1'
+const DEVICE_ID = params.get('device') || localStorage.getItem('jarvis_device') || 'web-dev'
+const TOKEN = params.get('token') || localStorage.getItem('jarvis_token') || 'tk_web_3Za5Xb7Vc9Td1Rf4Pg6Nh8Lj2'
 
 export default function App() {
   const canvasRef = useRef(null)
@@ -41,6 +44,8 @@ export default function App() {
 
   useEffect(() => { reactorRef.current?.setState(state) }, [state])
 
+  useEffect(() => { if (DESKTOP) begin() }, [])   // Electron: sem gesto do usuário
+
   async function begin() {
     setStarted(true)
     playerRef.current = createPlayer()
@@ -71,8 +76,10 @@ export default function App() {
       if (msg.type === 'hello_ok') playerRef.current?.preloadAcks(msg.ack_sounds || [])
       else if (msg.type === 'wake') {
         setHeard(''); setAnswer('')
+        window.jarvisDesktop?.wake()
         playerRef.current?.playAck()          // resposta local instantânea
       } else if (msg.type === 'state') {
+        window.jarvisDesktop?.state(msg.state)
         setState(msg.state === 'IDLE' ? 'IDLE' : msg.state)
         if (msg.state === 'IDLE') setTimeout(() => { setHeard(''); setAnswer('') }, 4000)
       } else if (msg.type === 'stt_partial' || msg.type === 'stt_final') {
@@ -88,8 +95,8 @@ export default function App() {
 
   const idle = state === 'IDLE'
   return (
-    <div className="stage">
-      {!started && (
+    <div className={'stage' + (DESKTOP ? ' desktop' : '')}>
+      {!started && !DESKTOP && (
         <div className="tap-hint" onClick={begin}>
           <span>TOQUE PARA INICIAR O JARVIS</span>
         </div>

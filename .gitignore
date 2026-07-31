@@ -12,3 +12,5 @@ apps/wear/local.properties
 *.keystore
 .gradle/
 releases/
+apps/desktop/node_modules/
+apps/desktop/dist/

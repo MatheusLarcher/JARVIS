@@ -98,3 +98,16 @@ canvas.reactor { display: block; }
 .tap-hint span { letter-spacing: 0.3em; color: var(--cyan); font-size: 0.95rem; }
 
 .dim { opacity: 0.55; transition: opacity 1.2s ease; }
+
+/* janela desktop (Electron): cartão arredondado sobre fundo transparente */
+.stage.desktop {
+  background: #000508;
+  border-radius: 24px;
+  border: 1px solid rgba(33, 212, 243, 0.14);
+  box-shadow: 0 0 60px rgba(33, 212, 243, 0.10);
+  overflow: hidden;
+}
+body:has(.stage.desktop) { background: transparent; }
+html:has(.stage.desktop) { background: transparent; }
+.stage.desktop .hud .clock { font-size: 2.2rem; }
+
