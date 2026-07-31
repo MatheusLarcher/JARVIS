@@ -1,0 +1,28 @@
+# Abstração da casa: house/<cômodo>/<dispositivo> → entity_id do Home Assistant
+# No modo mock os entity_id são simulados.
+places:
+  home:
+    name: Casa
+    networks: [wifi-home]
+  empresa:
+    name: 2D Consultores
+    networks: [wifi-2d]
+
+house:
+  sala:
+    luz_principal:
+      entity_id: light.luz_sala
+      aliases: [luz da sala, iluminação da sala, luz na sala]
+  quarto:
+    luz_principal:
+      entity_id: light.luz_quarto
+      aliases: [luz do quarto, iluminação do quarto]
+  escritorio:
+    luz_principal:
+      entity_id: light.luz_escritorio
+      aliases: [luz do escritório, luz do escritorio]
+
+sensors:
+  temperatura_ambiente:
+    entity_id: sensor.temperatura_ambiente
+    room: sala

@@ -1,0 +1,22 @@
+# Core do servidor JARVIS
+fastapi
+uvicorn[standard]
+websockets
+pydantic>=2
+pyyaml
+httpx
+numpy
+aiosqlite
+python-multipart
+
+# Agente
+google-adk
+litellm
+
+# TTS MVP + wake word
+edge-tts
+openwakeword
+onnxruntime
+
+# VAD
+silero-vad

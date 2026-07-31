@@ -1,0 +1,23 @@
+# Biblioteca de respostas prontas. Cada intent tem frases; os wavs são pré-gerados
+# pelo TTS (script scripts/build_library.py) e cacheados. O servidor sorteia uma variação.
+responses:
+  acknowledgement:            # tocado LOCALMENTE pelo device no wake — também sincronizado pra ele
+    - "Sim?"
+    - "Pois não?"
+    - "Estou ouvindo."
+  light_on_success:
+    - "Claro."
+    - "Ligando."
+    - "Certamente."
+    - "Pronto."
+  light_off_success:
+    - "Apagando."
+    - "Pronto."
+    - "Desligado."
+  not_understood:
+    - "Desculpe, não entendi."
+    - "Pode repetir?"
+  error:
+    - "Houve um problema ao executar isso."
+  ambiguous_room:
+    - "De qual cômodo?"

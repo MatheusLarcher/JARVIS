@@ -1,0 +1,56 @@
+server:
+  host: 0.0.0.0
+  port: 8040
+
+audio:
+  sample_rate: 16000
+  frame_ms: 80
+
+wake_word:
+  engine: openwakeword
+  model: hey_jarvis
+  threshold: 0.4
+  # depois de um wake, ignora novos wakes por N segundos
+  refractory_s: 2.0
+
+vad:
+  engine: silero
+  threshold: 0.5
+  # silencio (s) que encerra a fala
+  end_silence_s: 0.8
+  # tempo maximo ouvindo depois do wake (s)
+  max_utterance_s: 12.0
+
+stt:
+  engine: nemotron       # nemotron | dummy
+  model: nvidia/nemotron-3.5-asr-streaming-0.6b
+  language: pt-BR
+  chunk_ms: 160
+  device: cuda
+
+tts:
+  engine: edge              # edge | dummy
+  voice_profiles:
+    jarvis_br:
+      engine: edge
+      voice: pt-BR-AntonioNeural
+      rate: "+10%"
+      pitch: "-2Hz"
+  default_profile: jarvis_br
+  cache_dir: server/data/tts_cache
+  library_dir: server/data/library
+
+llm:
+  # LiteLLM model string - trocavel sem tocar codigo
+  model: deepseek/deepseek-chat
+  api_key_env: DEEPSEEK_API_KEY
+
+home_assistant:
+  # mock = simula os dispositivos localmente ate o HA real ser configurado
+  mode: mock                # mock | real
+  url: http://homeassistant.local:8123
+  token_env: HA_TOKEN
+  temperature_entity: sensor.temperatura_ambiente
+
+telemetry:
+  enabled: true

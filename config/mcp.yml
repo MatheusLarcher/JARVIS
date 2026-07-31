@@ -1,0 +1,6 @@
+# Servidores MCP disponiveis pro agente. Habilite com enabled: true.
+servers:
+  home_assistant:
+    enabled: false
+    command: mcp-proxy
+    args: ["http://homeassistant.local:8123/mcp_server/sse"]

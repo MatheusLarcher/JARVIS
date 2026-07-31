@@ -1,0 +1,26 @@
+# Intents locais — resolvidos SEM LLM.
+# match: regex (case-insensitive, sem acento — o router normaliza).
+# slots capturados por grupo nomeado.
+intents:
+  - id: light.turn_on
+    examples: ["liga a luz da sala", "acende a sala", "jarvis, luz da sala", "liga iluminação"]
+    patterns:
+      - '\b(liga|ligar|acende|acender|ativa|ativar)\b.*\b(luz|luzes|lampada|iluminacao)\b(?:.*\b(?:da|do|de|na|no)\s+(?P<room>sala|quarto|escritorio|cozinha|banheiro)\b)?'
+      - '^(?!.*\b(?:desliga|desligar|apaga|apagar|desativa|desativar)\b)\bluz\b.*\b(?:da|do|na|no)\s+(?P<room>sala|quarto|escritorio|cozinha|banheiro)\b\s*$'
+    response_intent: light_on_success
+
+  - id: light.turn_off
+    patterns:
+      - '\b(desliga|desligar|apaga|apagar|desativa|desativar)\b.*\b(luz|luzes|lampada|iluminacao)\b(?:.*\b(?:da|do|de|na|no)\s+(?P<room>sala|quarto|escritorio|cozinha|banheiro)\b)?'
+    response_intent: light_off_success
+
+  - id: info.time
+    patterns:
+      - '\bque horas\b'
+      - '\bhora(s)? (sao|e agora)\b'
+    response_intent: null   # resposta dinâmica (TTS com cache)
+
+  - id: info.temperature
+    patterns:
+      - '\b(temperatura|quantos graus|clima aqui)\b'
+    response_intent: null

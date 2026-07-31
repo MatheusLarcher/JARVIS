@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+server/data/jarvis.db
+server/data/tts_cache/
+.env
+node_modules/
+apps/web/dist/
+apps/android/**/build/
+apps/wear/**/build/
+apps/android/local.properties
+apps/wear/local.properties
+*.keystore
+.gradle/
+releases/

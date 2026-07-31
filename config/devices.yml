@@ -1,0 +1,23 @@
+# Identidade e token de cada dispositivo. O token vai na query do WS: /ws/{device_id}?token=...
+# Gere novos com: python -c "import secrets; print(secrets.token_urlsafe(24))"
+devices:
+  tablet-sala:
+    type: tablet
+    token: tk_tablet_9f2Kx7Lm3Qw8Rt5Vy1Zb4Nc6
+    default_room: sala
+  celular-matheus:
+    type: phone
+    token: tk_phone_2Hj8Mn4Pq6St9Uw3Xz5Ac7Ed1
+    default_room: null
+  galaxy-watch:
+    type: watch
+    token: tk_watch_5Rb1Td3Fg7Hk9Jm2Lp4Nq6Sv8
+    default_room: null
+  pc-matheus:
+    type: pc
+    token: tk_pc_8Wc2Ye4Gi6Kn8Mp1Or3Qt5Uv7
+    default_room: escritorio
+  web-dev:
+    type: web
+    token: tk_web_3Za5Xb7Vc9Td1Rf4Pg6Nh8Lj2
+    default_room: escritorio
