@@ -28,6 +28,13 @@ wake "Hey Jarvis" → ack local → "liga a luz da sala" → Nemotron transcreve
   __dirname, instalado por ~/Documents/GitHub/JARVIS). Validado: EXE instalado conecta
   como pc-matheus; wake acústico REAL não foi testável aqui (saída padrão = Astro A50,
   o som de teste não passou pelo mic) — testar falando de verdade.
+- **Config de áudio (2026-07-31):** modal na UI web (engrenagem discreta) com multi-mic
+  (checkboxes; várias fontes somadas no mesmo AudioWorklet), saída via setSinkId e
+  "Fechar o JARVIS" (IPC quit, só no desktop). Janela do PC = rgba(0,5,8,0.84) translúcida.
+  `jarvis-pin` (IPC) segura a janela aberta enquanto o modal estiver na tela. Labels dos
+  devices só aparecem onde a permissão de mic foi concedida (no Electron sempre; no
+  browser depende). Dev do Electron usa userData em %TEMP%\jarvis-desktop-dev pra não
+  brigar com a instância instalada (cache lock = exit -1 imediato).
 
 ## Decisões e aprendizados importantes
 

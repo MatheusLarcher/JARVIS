@@ -52,6 +52,10 @@ APKs prontos ficam em `releases/Jarvis.apk` e `releases/Jarvis-Watch.apk`.
 partir do `devices.yml` se o projeto estiver em `~\Documents\GitHub\JARVIS`).
 Uso: ícone fica oculto na bandeja; "Hey Jarvis" abre a janela do reator; ESC ou clique na
 bandeja esconde; menu da bandeja tem "Iniciar com o Windows" e "Sair".
+Engrenagem (canto superior esquerdo da janela) abre as configurações: escolher um ou
+VÁRIOS microfones (todos capturam juntos — as fontes são somadas num único stream),
+dispositivo de saída (`AudioContext.setSinkId`) e o botão "Fechar o JARVIS".
+Preferências ficam no localStorage da UI (`jarvis_audio`).
 
 ## Testes
 

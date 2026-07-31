@@ -1,5 +1,6 @@
 // Captura do microfone → PCM int16 16kHz em frames de 80ms (1280 amostras).
-// Usa AudioWorklet com downsample linear da taxa do contexto pra 16k.
+// Aceita VÁRIOS microfones: cada um vira um MediaStreamSource ligado no mesmo
+// AudioWorkletNode — o Web Audio soma as fontes num único sinal.
 
 const WORKLET = `
 class PcmCapture extends AudioWorkletProcessor {
@@ -30,15 +31,26 @@ class PcmCapture extends AudioWorkletProcessor {
 registerProcessor('pcm-capture', PcmCapture)
 `
 
-export async function startMic(onFrame, onLevel) {
-  const stream = await navigator.mediaDevices.getUserMedia({
-    audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
-  })
+// deviceIds: [] → microfone padrão; [id1, id2, ...] → todos misturados
+export async function startMic(onFrame, onLevel, deviceIds = []) {
+  const wanted = deviceIds.length ? deviceIds : [null]
+  const streams = []
+  for (const id of wanted) {
+    try {
+      streams.push(await navigator.mediaDevices.getUserMedia({
+        audio: {
+          ...(id ? { deviceId: { exact: id } } : {}),
+          channelCount: 1, echoCancellation: true, noiseSuppression: true,
+        },
+      }))
+    } catch { /* mic pode ter sido desplugado; segue com os outros */ }
+  }
+  if (!streams.length) throw new Error('nenhum microfone disponível')
+
   const ctx = new AudioContext()
   await ctx.resume()
   const url = URL.createObjectURL(new Blob([WORKLET], { type: 'application/javascript' }))
   await ctx.audioWorklet.addModule(url)
-  const src = ctx.createMediaStreamSource(stream)
   const node = new AudioWorkletNode(ctx, 'pcm-capture')
   node.port.onmessage = (e) => {
     const pcm = e.data
@@ -49,14 +61,27 @@ export async function startMic(onFrame, onLevel) {
     }
     onFrame(pcm.buffer)
   }
-  src.connect(node)
-  return { ctx, stop: () => { stream.getTracks().forEach(t => t.stop()); ctx.close() } }
+  for (const s of streams) ctx.createMediaStreamSource(s).connect(node)
+  return {
+    ctx,
+    stop: () => {
+      streams.forEach(s => s.getTracks().forEach(t => t.stop()))
+      ctx.close()
+    },
+  }
 }
 
 // Player: acks pré-carregados em memória + áudios de resposta por URL.
+// setOutput(sinkId) troca o dispositivo de saída (AudioContext.setSinkId).
 export function createPlayer() {
   const ctx = new AudioContext()
   const acks = []
+
+  async function setOutput(sinkId) {
+    try {
+      if (ctx.setSinkId) await ctx.setSinkId(sinkId || '')
+    } catch { /* dispositivo sumiu → fica no padrão */ }
+  }
 
   async function preloadAcks(list) {
     acks.length = 0
@@ -88,5 +113,5 @@ export function createPlayer() {
     return playBuffer(await ctx.decodeAudioData(buf))
   }
 
-  return { preloadAcks, playAck, playUrl, resume: () => ctx.resume() }
+  return { preloadAcks, playAck, playUrl, setOutput, resume: () => ctx.resume() }
 }

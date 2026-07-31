@@ -12,6 +12,10 @@ let tray = null
 let hideTimer = null
 let pinned = false // aberto manualmente pela bandeja → não esconde sozinho
 
+if (!app.isPackaged) {
+  // dev não briga com a instância instalada (userData separado)
+  app.setPath('userData', path.join(require('os').tmpdir(), 'jarvis-desktop-dev'))
+}
 if (!app.requestSingleInstanceLock()) app.quit()
 app.setAppUserModelId('com.larchertech.jarvis')
 
@@ -119,9 +123,15 @@ app.whenReady().then(() => {
 
   ipcMain.on('jarvis-wake', showReactor)
   ipcMain.on('jarvis-state', (_e, state) => {
-    if (state === 'IDLE') { pinned = false; scheduleHide() }
+    if (state === 'IDLE') { if (!pinned) scheduleHide() }
     else showReactor()
   })
+  ipcMain.on('jarvis-pin', (_e, on) => {
+    pinned = on
+    if (on) { clearTimeout(hideTimer); if (!win.isVisible()) win.show() }
+    else scheduleHide()
+  })
+  ipcMain.on('jarvis-quit', () => { win.destroy(); app.quit() })
 
   // validação (debug): JARVIS_DEBUG_SHOT=arquivo.png captura a janela no wake;
   // com JARVIS_DEBUG_SHOW=1 mostra e captura logo após carregar
@@ -134,6 +144,14 @@ app.whenReady().then(() => {
     if (process.env.JARVIS_DEBUG_SHOW) {
       win.webContents.on('did-finish-load', () => { win.showInactive(); shot(2500) })
     }
+  }
+  // JARVIS_DEBUG_QUIT=1: abre o modal e aciona o botão de fechar (valida preload+IPC)
+  if (process.env.JARVIS_DEBUG_QUIT) {
+    win.webContents.on('did-finish-load', () => {
+      setTimeout(() => win.webContents.executeJavaScript(
+        'document.querySelector(".gear")?.click(); ' +
+        'setTimeout(() => document.querySelector(".btn.danger")?.click(), 800)'), 4000)
+    })
   }
 })
 

@@ -4,4 +4,6 @@ const { contextBridge, ipcRenderer } = require('electron')
 contextBridge.exposeInMainWorld('jarvisDesktop', {
   wake: () => ipcRenderer.send('jarvis-wake'),
   state: (s) => ipcRenderer.send('jarvis-state', s),
+  pin: (on) => ipcRenderer.send('jarvis-pin', !!on),   // modal aberto → não esconder
+  quit: () => ipcRenderer.send('jarvis-quit'),
 })
