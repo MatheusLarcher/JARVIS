@@ -42,6 +42,17 @@ cd apps\android
 
 APKs prontos ficam em `releases/Jarvis.apk` e `releases/Jarvis-Watch.apk`.
 
+## Desktop (PC de bandeja)
+
+`apps/desktop` (Electron). Dev: `npm install && npm start` (usa o token do
+`config/devices.yml` do repo). Instalador: `npm run dist` → `dist/JARVIS Setup 0.1.0.exe`
+(cópia em `releases/JARVIS-Desktop-Setup.exe`). Instala em
+`%LOCALAPPDATA%\Programs\jarvis-desktop\`, registra auto-start no logon e guarda a config em
+`%APPDATA%\jarvis-desktop\config.json` (host/device/token — o token é preenchido sozinho a
+partir do `devices.yml` se o projeto estiver em `~\Documents\GitHub\JARVIS`).
+Uso: ícone fica oculto na bandeja; "Hey Jarvis" abre a janela do reator; ESC ou clique na
+bandeja esconde; menu da bandeja tem "Iniciar com o Windows" e "Sair".
+
 ## Testes
 
 ```

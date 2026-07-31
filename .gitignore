@@ -14,3 +14,4 @@ apps/wear/local.properties
 releases/
 apps/desktop/node_modules/
 apps/desktop/dist/
+server/data/jarvis.log

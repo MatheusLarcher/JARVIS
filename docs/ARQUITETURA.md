@@ -67,6 +67,8 @@ Servidor → device: `wake` (acende reator + ack local), `state` (LISTENING/THIN
 
 ```text
 server/           backend Python (FastAPI)
+apps/
+  desktop/        PC (Electron de bandeja: tray oculto + janela do reator no wake)
   jarvis/
     gateway/      WS + REST + auth
     audio/        pipeline, VAD, wake word
@@ -80,14 +82,21 @@ server/           backend Python (FastAPI)
     memory/       SQLite, sessões, histórico
     telemetry/    métricas de latência por etapa
   data/           db, cache TTS, biblioteca de áudio
-apps/
   android/        tablet + celular (Kotlin, módulos compartilhados)
   wear/           Wear OS
-  web/            React/Vite (PC)
+  web/            React/Vite (navegador + renderer do desktop)
 config/           settings.yml, devices.yml, intents/, house.yml
 docs/
 tests/
 ```
+
+## Desktop (PC de bandeja)
+
+O app Electron (`apps/desktop`) não tem UI própria: carrega a web servida pelo servidor com
+`?desktop=1&device=pc-matheus&token=...`. O main process só cuida de: ícone na bandeja,
+mic em background (`backgroundThrottling: false`), mostrar a janela no `wake` (IPC via
+preload, `showInactive` pra não roubar foco) e escondê-la 3s depois do estado `IDLE`.
+Melhoria visual na web = melhora no desktop sem reinstalar.
 
 ## Métricas (telemetria local)
 
