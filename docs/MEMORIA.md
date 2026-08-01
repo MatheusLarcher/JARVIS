@@ -75,6 +75,46 @@ Bugs encontrados e corrigidos nessa rodada (todos reais, pegos no E2E):
   só encerrar por silêncio depois que houve fala (`_speech_seen`).
 - Ruído solto acionava o STT à toa → exigir fala contínua (`vad.min_speech_ms`, 240ms).
 
+## "Falo Jarvis e não abre" + erro ao ligar a máquina (2026-08-01)
+
+Três causas independentes, todas confirmadas com medição (não chute):
+
+1. **Microfone MUDO era a causa principal.** O padrão do Windows é o headset
+   Astro A50; com ele na base, capta silêncio digital absoluto (-91 dB medido com
+   `ffmpeg volumedetect`). Os outros mics ouvem bem (NVIDIA Broadcast -13 dB pico,
+   Notebook Realtek -22 dB). Corrigido com **watchdog de microfone** no app: 15s sem
+   sinal → troca sozinho pro próximo e salva a preferência. Cuidado com o limiar:
+   `getByteTimeDomainData` tem piso de quantização de 1/128 = 0.0078, então mic morto
+   NÃO dá zero — usar limiar 0.006 sobre o nível do worklet (que é int16 e dá 0 real).
+2. **`forrtl: error (200): program aborting due to window-CLOSE event`** — runtime
+   Fortran da Intel (dentro de numpy/scipy) mata o processo quando o console recebe
+   evento de fechar/logoff. Era o erro ao ligar o PC. Corrigido com
+   `FOR_DISABLE_CONSOLE_CTRL_HANDLER=1` nos `.bat`.
+3. **App da bandeja carregava a UI DO SERVIDOR** — no boot o servidor ainda estava
+   subindo (~1min de modelo), o load falhava e o retry usava `getURL()` (vazio após
+   falha), deixando o app órfão. Agora a interface é **empacotada no app**
+   (`sync-web.js` copia `apps/web/dist` → `apps/desktop/build/web`, Vite com
+   `base: './'`) e só o WebSocket depende do servidor.
+
+Descoberta importante do teste acústico: pelo alto-falante, o STT transcreve "Jarvis"
+como **"já fiz"** (duas palavras). O matcher ganhou comparação **fonética** (v↔f,
+z↔s, h mudo, dígrafos) e teste de **bigramas colados** — "já fiz"→"jafis" vs
+"jarfis" = 1 edição. Falso positivo evitado exigindo ≥5 letras pra tolerar 2 edições
+("já vi" não dispara).
+
+Infra de diagnóstico criada (usar SEMPRE antes de chutar):
+- `GET /api/audio/debug` — rms/VAD por dispositivo, direto do pipeline.
+- `window.__jarvisDiag()` no app (via CDP) — mic em uso, frames, pico, prefs.
+- `tests/diag_microfones.py` — mede todos os mics tocando som pelo alto-falante.
+- `tests/test_mic_real.py` — E2E acústico REAL (toca no alto-falante via CDP+setSinkId,
+  confere em `/api/metrics/recent`). Resultado: ouviu "liga a luz da sala", 2,3s.
+- Tarefa **JARVIS Watchdog** (5 em 5 min) religa servidor/voz/app que estiverem fora.
+
+Armadilha de teste: `Get-Process JARVIS` NÃO pega o app em dev (lá o processo chama
+`electron.exe`) — matar só o JARVIS.exe deixa a instância antiga viva e o
+singleInstanceLock derruba a nova, fazendo parecer que a correção não funcionou.
+Filtrar por `Path` contendo o projeto (e nunca matar o Electron do agent-code).
+
 ## Decisões e aprendizados importantes
 
 - **Wake word e VAD são STATEFUL → uma instância POR CONEXÃO** (`AudioPipeline.init()`).

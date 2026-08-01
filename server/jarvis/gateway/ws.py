@@ -20,6 +20,7 @@ log = logging.getLogger("jarvis.ws")
 router = APIRouter()
 
 connections: dict[str, WebSocket] = {}
+pipelines: dict[str, "AudioPipeline"] = {}   # pra diagnóstico de áudio
 
 
 def _auth(device_id: str, token: str | None) -> bool:
@@ -78,6 +79,7 @@ async def ws_device(websocket: WebSocket, device_id: str, token: str | None = No
 
     pipeline = AudioPipeline(device_id, on_wake, on_ack, on_partial, on_final, on_timeout)
     await pipeline.init()
+    pipelines[device_id] = pipeline
 
     ambient_task = asyncio.create_task(_ambient_loop(send))
     try:
@@ -94,6 +96,7 @@ async def ws_device(websocket: WebSocket, device_id: str, token: str | None = No
     finally:
         ambient_task.cancel()
         connections.pop(device_id, None)
+        pipelines.pop(device_id, None)
         ctx = context_engine.get(device_id)
         if ctx:
             await store.save_device_context(device_id, ctx.snapshot())

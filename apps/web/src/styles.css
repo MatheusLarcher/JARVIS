@@ -176,6 +176,37 @@ html:has(.stage.desktop) { background: transparent; }
 }
 .opt:hover { background: rgba(33, 212, 243, 0.07); }
 .opt input { accent-color: var(--cyan); }
+.opt-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* medidor de nível por microfone: mostra na hora qual está mudo */
+.meter {
+  width: 54px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(33, 212, 243, 0.12);
+  overflow: hidden;
+  flex: none;
+}
+.meter i {
+  display: block;
+  height: 100%;
+  background: var(--cyan);
+  transition: width 0.1s linear;
+}
+.meter i.dead { background: #5b3a3a; }
+
+/* aviso discreto, sobre a margem, sem empurrar nada */
+.mic-warn {
+  position: absolute;
+  bottom: 0.6rem;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.7rem;
+  color: #c98d5a;
+  opacity: 0.75;
+  letter-spacing: 0.08em;
+  pointer-events: none;
+}
 .modal-select {
   width: 100%;
   background: #05161d;

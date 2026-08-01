@@ -23,11 +23,18 @@ CASES = [
     ("Jarvez", True, ""),
     ("Javis, desliga a luz", True, "desliga a luz"),
     ("Jarvis liga a luz da sala por favor", True, "liga a luz da sala por favor"),
+    # capturados no microfone real (o STT parte ou troca letras do nome)
+    ("Já fiz libe a luz da sala.", True, "libe a luz da sala"),
+    ("Jar vis, liga a luz", True, "liga a luz"),
+    ("Jarbis, que horas são", True, "que horas sao"),
+
     # não deve disparar
     ("liga a luz da sala", False, ""),
     ("hoje o dia foi bom", False, ""),
     ("já vi esse filme", False, ""),
     ("vamos jantar", False, ""),
+    ("já era tarde", False, ""),
+    ("o carro é novo", False, ""),
     ("", False, ""),
 ]
 

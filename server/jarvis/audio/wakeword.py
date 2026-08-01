@@ -21,6 +21,21 @@ def normalize(text: str) -> str:
     return re.sub(r"[^\w\s]", " ", text)
 
 
+def phonetic(word: str) -> str:
+    """Reduz o que o STT costuma trocar em português.
+
+    "jarvis" sai como "jarves", "javis", "jarvez" e até "já fiz" — todos viram
+    a mesma forma aqui, porque v/f e z/s soam parecido e o h é mudo.
+    """
+    w = word
+    for a, b in (("lh", "l"), ("nh", "n"), ("ch", "x"), ("qu", "c"), ("ss", "s"),
+                 ("rr", "r"), ("ph", "f")):
+        w = w.replace(a, b)
+    table = str.maketrans({"v": "f", "z": "s", "ç": "s", "k": "c", "w": "f",
+                           "y": "i", "h": "", "j": "j", "g": "j"})
+    return w.translate(table)
+
+
 def _edits(a: str, b: str) -> int:
     """Distância de Levenshtein (palavras curtas, custo irrelevante)."""
     if a == b:
@@ -38,6 +53,7 @@ class WakeMatcher:
     def __init__(self):
         cfg = config.settings["wake_word"]
         self.keyword = normalize(cfg.get("keyword", "jarvis")).strip()
+        self.key_ph = phonetic(self.keyword)
         self.max_edits = int(cfg.get("fuzzy_max_edits", 2))
         # palavras que costumam vir grudadas antes do nome
         self.prefixes = {"hey", "ei", "ok", "ola", "oi", "e", "o"}
@@ -45,20 +61,33 @@ class WakeMatcher:
     def _is_keyword(self, word: str) -> bool:
         if len(word) < 4:            # curto demais casaria com qualquer coisa
             return False
+        # palavra curta tem menos evidência: exige estar mais perto
         allowed = self.max_edits if len(word) >= 5 else 1
-        return _edits(word, self.keyword) <= allowed
+        if _edits(word, self.keyword) <= allowed:
+            return True
+        return _edits(phonetic(word), self.key_ph) <= allowed
 
     def match(self, transcript: str) -> tuple[bool, str]:
         """(chamou?, comando restante da mesma frase)."""
         words = normalize(transcript).split()
         if not words:
             return False, ""
+
+        def strip_prefix(rest_before: list[str], i: int) -> list[str]:
+            # tira "hey/ok/ei" que só existiam por causa do nome
+            if i > 0 and words[i - 1] in self.prefixes:
+                return rest_before[:-1]
+            return rest_before
+
         for i, w in enumerate(words):
             if self._is_keyword(w):
-                rest = words[:i] + words[i + 1:]
-                # tira "hey/ok/ei" que só existiam por causa do nome
-                if i > 0 and words[i - 1] in self.prefixes:
-                    rest = words[:i - 1] + words[i + 1:]
+                rest = strip_prefix(words[:i], i) + words[i + 1:]
+                return True, " ".join(rest).strip()
+
+        # o STT às vezes parte o nome em duas ("jarvis" -> "já fiz", "jar vis")
+        for i in range(len(words) - 1):
+            if self._is_keyword(words[i] + words[i + 1]):
+                rest = strip_prefix(words[:i], i) + words[i + 2:]
                 return True, " ".join(rest).strip()
         return False, ""
 

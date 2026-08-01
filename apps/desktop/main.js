@@ -17,6 +17,18 @@ if (!app.isPackaged) {
   app.setPath('userData', path.join(require('os').tmpdir(), 'jarvis-desktop-dev'))
 }
 if (!app.requestSingleInstanceLock()) app.quit()
+
+// log próprio: sem isto não dá pra saber por que o app não subiu no boot
+let logFile = null
+function log(msg) {
+  const line = `[${new Date().toISOString()}] ${msg}\n`
+  try {
+    if (!logFile) logFile = path.join(app.getPath('userData'), 'desktop.log')
+    fs.appendFileSync(logFile, line)
+  } catch { }
+  console.log(line.trim())
+}
+process.on('uncaughtException', (e) => log(`ERRO nao tratado: ${e && e.stack}`))
 app.setAppUserModelId('com.larchertech.jarvis')
 
 function readConfig() {
@@ -57,17 +69,40 @@ function createWindow(cfg) {
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       backgroundThrottling: false, // mic continua ouvindo com a janela escondida
+      // a config vai pro preload por argumento (a página é local)
+      additionalArguments: [
+        '--jarvis-config=' + Buffer.from(JSON.stringify(cfg)).toString('base64'),
+      ],
     },
   })
   win.setAlwaysOnTop(true, 'screen-saver')
-  win.loadURL(`http://${cfg.host}/?desktop=1&device=${cfg.device}&token=${encodeURIComponent(cfg.token)}`)
+
+  // Interface EMPACOTADA no app: abre na hora, mesmo com o servidor ainda
+  // subindo (ele demora ~1min carregando os modelos). O WebSocket reconecta
+  // sozinho quando o servidor ficar pronto.
+  const page = path.join(__dirname, 'build', 'web', 'index.html')
+  if (fs.existsSync(page)) {
+    win.loadFile(page)
+  } else {
+    win.loadURL(`http://${cfg.host}/?desktop=1&device=${cfg.device}&token=${encodeURIComponent(cfg.token)}`)
+  }
+
   win.on('close', (e) => { e.preventDefault(); win.hide() })
   win.webContents.on('before-input-event', (_e, input) => {
     if (input.key === 'Escape') win.hide()
   })
-  // servidor pode ainda estar subindo no boot: tenta de novo
-  win.webContents.on('did-fail-load', () => {
-    setTimeout(() => win.loadURL(win.webContents.getURL()), 3000)
+  let reloadTimer = null
+  win.webContents.on('did-fail-load', (_e, code, desc, url) => {
+    log(`falha ao carregar (${code} ${desc}); tentando de novo`)
+    clearTimeout(reloadTimer)
+    reloadTimer = setTimeout(() => {
+      if (fs.existsSync(page)) win.loadFile(page)
+      else if (url) win.loadURL(url)
+    }, 3000)
+  })
+  win.webContents.on('render-process-gone', (_e, details) => {
+    log(`renderer morreu (${details.reason}); recarregando`)
+    setTimeout(() => win.reload(), 1000)
   })
 }
 
@@ -112,6 +147,7 @@ function buildTray(cfg) {
 
 app.whenReady().then(() => {
   const cfg = readConfig()
+  log(`iniciando (empacotado=${app.isPackaged}) servidor=${cfg.host} device=${cfg.device} token=${cfg.token ? 'ok' : 'AUSENTE'}`)
   // mic sem prompt (app confiável local)
   const ses = require('electron').session.defaultSession
   ses.setPermissionRequestHandler((_wc, permission, cb) => cb(permission === 'media'))

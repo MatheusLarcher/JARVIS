@@ -110,6 +110,12 @@ class AudioPipeline:
         # ~240ms de fala contínua antes de acionar o STT
         self._min_speech_frames = max(1, int(cfg["vad"].get("min_speech_ms", 240) / 80))
 
+        # diagnóstico: dá pra ver se o áudio do dispositivo está chegando e com
+        # que intensidade — é a primeira coisa a checar quando "ele não me ouve"
+        self.stats = {"frames": 0, "rms_atual": 0.0, "rms_maximo": 0.0,
+                      "vad_maximo": 0.0, "ultima_fala_ha_s": None, "fase": "idle"}
+        self._last_speech_t = 0.0
+
     async def init(self):
         """Cria os modelos stateful desta conexão (fora do event loop)."""
         loop = asyncio.get_running_loop()
@@ -119,6 +125,14 @@ class AudioPipeline:
     # ------------------------------------------------------------------ entrada
     async def feed(self, pcm_bytes: bytes):
         pcm = np.frombuffer(pcm_bytes, dtype=np.int16)
+        rms = float(np.sqrt(np.mean(pcm.astype(np.float32) ** 2))) / 32768.0
+        s = self.stats
+        s["frames"] += 1
+        s["rms_atual"] = round(rms, 5)
+        s["rms_maximo"] = round(max(s["rms_maximo"], rms), 5)
+        s["fase"] = self.phase.value
+        s["ultima_fala_ha_s"] = (round(time.monotonic() - self._last_speech_t, 1)
+                                 if self._last_speech_t else None)
         async with self._lock:
             if self.phase == Phase.BUSY:
                 return
@@ -135,6 +149,9 @@ class AudioPipeline:
             win, self._vad_buf = self._vad_buf[:VAD_FRAME], self._vad_buf[VAD_FRAME:]
             t = torch.from_numpy(win.astype(np.float32) / 32768.0)
             prob = max(prob, float(self.vad_model(t, SAMPLE_RATE).item()))
+        self.stats["vad_maximo"] = round(max(self.stats["vad_maximo"], prob), 3)
+        if prob >= self._vad_threshold:
+            self._last_speech_t = time.monotonic()
         return prob
 
     async def _feed_idle(self, pcm: np.ndarray):

@@ -17,3 +17,7 @@ apps/desktop/dist/
 server/data/jarvis.log
 server/data/voice/
 server/data/voice.log
+server/data/watchdog.log
+apps/desktop/build/web/
+server/data/*.log.old
+tests/.cache/

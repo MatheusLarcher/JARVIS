@@ -3,14 +3,25 @@ import { createPlayer, startMic } from './audio.js'
 import { createReactor } from './reactor.js'
 
 const params = new URLSearchParams(location.search)
-// modo desktop: janela Electron da bandeja — auto-inicia e avisa o main pra mostrar/esconder
-const DESKTOP = params.get('desktop') === '1'
-const DEVICE_ID = params.get('device') || localStorage.getItem('jarvis_device') || 'web-dev'
-const TOKEN = params.get('token') || localStorage.getItem('jarvis_token') || 'tk_web_3Za5Xb7Vc9Td1Rf4Pg6Nh8Lj2'
+// No app de bandeja a interface é local (file://) e o main process informa a
+// configuração — assim a janela abre mesmo com o servidor ainda subindo.
+const CFG = window.jarvisDesktop?.config || {}
+const DESKTOP = CFG.desktop === true || params.get('desktop') === '1'
+const DEVICE_ID = CFG.device || params.get('device') || localStorage.getItem('jarvis_device') || 'web-dev'
+const TOKEN = CFG.token || params.get('token') || localStorage.getItem('jarvis_token') || 'tk_web_3Za5Xb7Vc9Td1Rf4Pg6Nh8Lj2'
+// servidor: no navegador é a própria origem; no desktop vem da config
+const SERVER = CFG.host || location.host
+const HTTP = `http://${SERVER}`
+const WS = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${SERVER}`
 
 const loadAudioPrefs = () => {
   try { return JSON.parse(localStorage.getItem('jarvis_audio') || '{}') } catch { return {} }
 }
+
+// Abaixo disto o microfone está morto (headset na base, mudo no hardware).
+// Sala silenciosa ainda passa bem deste valor; mic mudo fica no chão da escala.
+const MIC_ALIVE_LEVEL = 0.006
+const MIC_DEAD_AFTER_MS = 15000
 
 export default function App() {
   const canvasRef = useRef(null)
@@ -30,6 +41,9 @@ export default function App() {
   const [showConfig, setShowConfig] = useState(false)
   const [devices, setDevices] = useState({ mics: [], outs: [] })
   const [prefs, setPrefs] = useState(loadAudioPrefs)   // { mics: [ids], output: id }
+  const [micWarn, setMicWarn] = useState('')
+  // vigia do microfone: headset na base/desligado fica MUDO e o Jarvis fica surdo
+  const micWatch = useRef({ lastSignal: Date.now(), tried: [], current: null })
 
   // relógio + drift anti burn-in
   useEffect(() => {
@@ -65,16 +79,70 @@ export default function App() {
   async function startCapture(micIds) {
     micRef.current?.stop()
     micRef.current = null
+    const w = micWatch.current
+    w.lastSignal = Date.now()
+    w.current = (micIds && micIds[0]) || null
+    w.peak = 0
+    w.frames = 0
     try {
       micRef.current = await startMic(
-        (frame) => { if (wsRef.current?.readyState === 1) wsRef.current.send(frame) },
-        (lvl) => reactorRef.current?.setLevel(lvl),
+        (frame) => {
+          if (wsRef.current?.readyState === 1) wsRef.current.send(frame)
+          w.frames++
+        },
+        (lvl) => {
+          reactorRef.current?.setLevel(lvl)
+          w.peak = Math.max(w.peak, lvl)
+          // ruído ambiente real sempre passa disto; microfone morto fica abaixo
+          if (lvl > MIC_ALIVE_LEVEL) {
+            w.lastSignal = Date.now()
+            setMicWarn('')
+          }
+        },
         micIds || [],
       )
-    } catch {
+      w.label = micRef.current?.labels?.join(' + ') || 'padrão do sistema'
+    } catch (e) {
+      w.error = String(e)
       setAnswer('Sem acesso ao microfone')
     }
   }
+
+  // janela de diagnóstico (usada pelos testes): window.__jarvisDiag()
+  useEffect(() => {
+    window.__jarvisDiag = () => ({
+      ...micWatch.current,
+      semSinalHa: Math.round((Date.now() - micWatch.current.lastSignal) / 1000),
+      online, state, prefs,
+    })
+  })
+
+  // Se o microfone ficar sem NENHUM sinal, troca sozinho pelo próximo da lista.
+  useEffect(() => {
+    if (!started) return
+    const timer = setInterval(async () => {
+      const w = micWatch.current
+      if (Date.now() - w.lastSignal < MIC_DEAD_AFTER_MS) return
+
+      const all = (await navigator.mediaDevices.enumerateDevices())
+        .filter(d => d.kind === 'audioinput'
+          && d.deviceId !== 'default' && d.deviceId !== 'communications')
+      if (all.length < 2) return
+
+      w.tried.push(w.current)
+      const next = all.find(d => !w.tried.includes(d.deviceId))
+        || all.find(d => d.deviceId !== w.current)
+      if (!next) { w.tried = []; return }
+
+      console.warn('microfone sem sinal; trocando para', next.label)
+      setMicWarn(`microfone sem sinal — usando ${next.label}`)
+      const p = { ...prefs, mics: [next.deviceId] }
+      setPrefs(p)
+      localStorage.setItem('jarvis_audio', JSON.stringify(p))
+      await startCapture([next.deviceId])
+    }, 5000)
+    return () => clearInterval(timer)
+  }, [started, prefs])
 
   async function begin() {
     setStarted(true)
@@ -93,8 +161,7 @@ export default function App() {
   }
 
   function connect() {
-    const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-    const ws = new WebSocket(`${proto}://${location.host}/ws/${DEVICE_ID}?token=${TOKEN}`)
+    const ws = new WebSocket(`${WS}/ws/${DEVICE_ID}?token=${TOKEN}`)
     ws.binaryType = 'arraybuffer'
     wsRef.current = ws
     ws.onopen = () => {
@@ -105,7 +172,11 @@ export default function App() {
     ws.onmessage = async (e) => {
       if (typeof e.data !== 'string') return
       const msg = JSON.parse(e.data)
-      if (msg.type === 'hello_ok') playerRef.current?.preloadAcks(msg.ack_sounds || [])
+      if (msg.type === 'hello_ok') {
+        // URLs do servidor: no desktop a página é local, então precisa do host
+        playerRef.current?.preloadAcks(
+          (msg.ack_sounds || []).map(a => ({ ...a, url: HTTP + a.url })))
+      }
       else if (msg.type === 'wake') {
         setHeard(''); setAnswer('')
         window.jarvisDesktop?.wake()          // só acende o reator
@@ -119,7 +190,7 @@ export default function App() {
         setHeard(msg.text)
       } else if (msg.type === 'speak') {
         setAnswer(msg.text || '')
-        if (msg.audio_url) await playerRef.current?.playUrl(msg.audio_url)
+        if (msg.audio_url) await playerRef.current?.playUrl(HTTP + msg.audio_url)
       } else if (msg.type === 'ambient') {
         if (msg.temperature_c != null) setTemp(msg.temperature_c)
       }
@@ -161,6 +232,7 @@ export default function App() {
       <div className={'status-chip' + (online ? ' online' : '')}>
         <span className="dot" />{online ? 'ONLINE' : 'RECONECTANDO'}
       </div>
+      {micWarn && <div className="mic-warn">{micWarn}</div>}
       {started && (
         <button className="gear" title="Configurações" onClick={openConfig}>⚙</button>
       )}
@@ -176,24 +248,64 @@ export default function App() {
 function ConfigModal({ devices, prefs, onSave, onClose }) {
   const [mics, setMics] = useState(prefs.mics || [])
   const [output, setOutput] = useState(prefs.output || '')
+  const [levels, setLevels] = useState({})   // deviceId -> nível 0..1
 
   const toggleMic = (id) =>
     setMics(m => m.includes(id) ? m.filter(x => x !== id) : [...m, id])
+
+  // mede todos os microfones ao vivo: um mudo aparece na hora
+  useEffect(() => {
+    let stop = false
+    const cleanup = []
+    ;(async () => {
+      for (const d of devices.mics) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            audio: { deviceId: { exact: d.deviceId } },
+          })
+          const ctx = new AudioContext()
+          const an = ctx.createAnalyser()
+          an.fftSize = 512
+          ctx.createMediaStreamSource(stream).connect(an)
+          const buf = new Uint8Array(an.fftSize)
+          cleanup.push(() => { stream.getTracks().forEach(t => t.stop()); ctx.close() })
+          const tick = () => {
+            if (stop) return
+            an.getByteTimeDomainData(buf)
+            let peak = 0
+            for (const v of buf) peak = Math.max(peak, Math.abs(v - 128) / 128)
+            setLevels(l => ({ ...l, [d.deviceId]: peak }))
+            setTimeout(tick, 120)
+          }
+          tick()
+        } catch { /* dispositivo ocupado/indisponível */ }
+      }
+    })()
+    return () => { stop = true; cleanup.forEach(f => f()) }
+  }, [devices.mics])
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()}>
         <div className="modal-title">CONFIGURAÇÕES</div>
 
-        <div className="modal-section">MICROFONES <span className="hint">(vários = escuta todos juntos; nenhum = padrão do sistema)</span></div>
+        <div className="modal-section">MICROFONES <span className="hint">(fale para ver a barrinha mexer; vários = escuta todos juntos)</span></div>
         <div className="modal-list">
-          {devices.mics.map(d => (
-            <label key={d.deviceId} className="opt">
-              <input type="checkbox" checked={mics.includes(d.deviceId)}
-                onChange={() => toggleMic(d.deviceId)} />
-              <span>{d.label || 'Microfone'}</span>
-            </label>
-          ))}
+          {devices.mics.map(d => {
+            const lvl = levels[d.deviceId]
+            const mudo = lvl !== undefined && lvl < 0.005
+            return (
+              <label key={d.deviceId} className="opt">
+                <input type="checkbox" checked={mics.includes(d.deviceId)}
+                  onChange={() => toggleMic(d.deviceId)} />
+                <span className="opt-label">{d.label || 'Microfone'}</span>
+                <span className="meter" title={mudo ? 'sem sinal' : 'captando'}>
+                  <i style={{ width: `${Math.min(100, (lvl || 0) * 260)}%` }}
+                    className={mudo ? 'dead' : ''} />
+                </span>
+              </label>
+            )
+          })}
           {!devices.mics.length && <div className="hint">nenhum microfone encontrado</div>}
         </div>
 

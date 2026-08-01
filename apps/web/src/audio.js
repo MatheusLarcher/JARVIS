@@ -64,6 +64,7 @@ export async function startMic(onFrame, onLevel, deviceIds = []) {
   for (const s of streams) ctx.createMediaStreamSource(s).connect(node)
   return {
     ctx,
+    labels: streams.map(s => s.getAudioTracks()[0]?.label || '?'),
     stop: () => {
       streams.forEach(s => s.getTracks().forEach(t => t.stop()))
       ctx.close()

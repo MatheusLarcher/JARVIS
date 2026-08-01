@@ -57,6 +57,42 @@ VÁRIOS microfones (todos capturam juntos — as fontes são somadas num único 
 dispositivo de saída (`AudioContext.setSinkId`) e o botão "Fechar o JARVIS".
 Preferências ficam no localStorage da UI (`jarvis_audio`).
 
+## "O JARVIS não me ouve" — como diagnosticar
+
+Ordem de checagem (do mais comum pro mais raro):
+
+1. **O áudio está chegando no servidor?**
+   ```
+   curl http://127.0.0.1:8040/api/audio/debug
+   ```
+   - `rms_maximo` perto de 0 → **microfone mudo**. Foi o caso do headset Astro A50
+     na base: o Windows mantém ele como microfone PADRÃO e ele não capta nada.
+     O app troca sozinho depois de 15s sem sinal, mas dá pra escolher na engrenagem.
+   - `vad_maximo` acima de 0.5 → o servidor reconhece como fala. Se chega som mas o
+     VAD não sobe, o volume está baixo demais.
+2. **Qual microfone o app está usando?** `python tests/diag_app_mic.py`
+   (precisa do app com `--remote-debugging-port=9333`).
+3. **Qual microfone escuta a sala?** `python tests/diag_microfones.py` mede todos.
+4. **Teste ponta a ponta pelo microfone real:** `python tests/test_mic_real.py`.
+5. **O que ele entendeu?** `server/data/jarvis.log` mostra `fala: '...'` de cada
+   captura. Se aparecer o texto mas não reagir, o nome não foi reconhecido —
+   veja `wake_word` em `config/settings.yml`.
+
+## Se não subir sozinho ao ligar o PC
+
+Três camadas, nessa ordem:
+
+| Camada | O quê |
+|---|---|
+| Tarefa **JARVIS Server** (ONLOGON) | roda `start_jarvis.bat`, que abre o servidor e o serviço de voz, cada um com loop de reinício |
+| Chave `Run` do usuário | abre o app da bandeja (`JARVIS.exe`) |
+| Tarefa **JARVIS Watchdog** (a cada 5 min) | confere os três e religa o que estiver fora; log em `server/data/watchdog.log` |
+
+Os `.bat` definem `FOR_DISABLE_CONSOLE_CTRL_HANDLER=1`: sem isso a runtime Fortran
+que vem dentro do numpy/scipy **mata o processo** quando o console recebe evento de
+fechar/logoff (`forrtl: error (200): program aborting due to window-CLOSE event`) —
+era o erro que aparecia ao ligar a máquina.
+
 ## Testes
 
 ```

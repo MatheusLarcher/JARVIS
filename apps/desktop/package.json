@@ -1,12 +1,13 @@
 {
   "name": "jarvis-desktop",
   "productName": "JARVIS",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "main": "main.js",
   "scripts": {
-    "start": "electron .",
-    "dist": "electron-builder --win nsis"
+    "sync-web": "node sync-web.js",
+    "start": "npm run sync-web && electron .",
+    "dist": "npm run sync-web && electron-builder --win nsis"
   },
   "devDependencies": {
     "electron": "^33.0.0",
@@ -19,7 +20,7 @@
     "appId": "com.larchertech.jarvis",
     "productName": "JARVIS",
     "icon": "build/icon.ico",
-    "files": ["main.js", "preload.js", "build/**"],
+    "files": ["main.js", "preload.js", "sync-web.js", "build/**"],
     "win": {
       "target": "nsis",
       "icon": "build/icon.ico"
@@ -27,7 +28,7 @@
     "nsis": {
       "oneClick": true,
       "runAfterFinish": true,
-      "deleteAppDataOnUninstall": true
+      "deleteAppDataOnUninstall": false
     }
   }
 }

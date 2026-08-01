@@ -3,6 +3,8 @@ import { defineConfig } from 'vite'
 
 export default defineConfig({
   plugins: [react()],
+  // caminhos relativos: o app de bandeja carrega o mesmo build por file://
+  base: './',
   server: {
     port: 8042,
     proxy: {

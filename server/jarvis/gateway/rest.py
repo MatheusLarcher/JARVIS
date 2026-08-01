@@ -36,6 +36,18 @@ async def status():
     return {"ok": True, "devices_online": list(connections.keys())}
 
 
+@router.get("/api/audio/debug")
+async def audio_debug():
+    """O áudio de cada dispositivo está chegando? Com que intensidade?
+
+    rms_maximo ~0        -> microfone mudo (headset na base, mic desligado)
+    rms_maximo > 0.01    -> chega som
+    vad_maximo > 0.5     -> o servidor reconhece como FALA
+    """
+    from .ws import pipelines
+    return {dev: p.stats for dev, p in pipelines.items()}
+
+
 @router.get("/api/metrics/recent")
 async def recent_metrics(limit: int = 20):
     cur = await store._db.execute(
