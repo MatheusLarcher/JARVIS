@@ -17,5 +17,9 @@ contextBridge.exposeInMainWorld('jarvisDesktop', {
   wake: () => ipcRenderer.send('jarvis-wake'),
   state: (s) => ipcRenderer.send('jarvis-state', s),
   pin: (on) => ipcRenderer.send('jarvis-pin', !!on),   // modal aberto → não esconder
+  speaking: (on) => ipcRenderer.send('jarvis-speaking', !!on),
   quit: () => ipcRenderer.send('jarvis-quit'),
+  // visibilidade REAL da janela (o visibilityState do Chromium não muda com
+  // backgroundThrottling desligado) — usado pelos testes
+  isVisible: () => ipcRenderer.invoke('jarvis-is-visible'),
 })

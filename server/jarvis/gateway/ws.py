@@ -88,7 +88,8 @@ async def ws_device(websocket: WebSocket, device_id: str, token: str | None = No
             if msg.get("bytes") is not None:
                 await pipeline.feed(msg["bytes"])
             elif msg.get("text"):
-                await _handle_json(device_id, json.loads(msg["text"]), send, pipeline, dialog)
+                await _handle_json(device_id, json.loads(msg["text"]), send, pipeline,
+                                   dialog, on_final)
             elif msg.get("type") == "websocket.disconnect":
                 break
     except WebSocketDisconnect:
@@ -103,7 +104,8 @@ async def ws_device(websocket: WebSocket, device_id: str, token: str | None = No
         log.info("desconectado: %s", device_id)
 
 
-async def _handle_json(device_id: str, msg: dict, send, pipeline: AudioPipeline, dialog: DialogManager):
+async def _handle_json(device_id: str, msg: dict, send, pipeline: AudioPipeline,
+                       dialog: DialogManager, on_final_texto):
     t = msg.get("type")
     if t == "hello":
         ctx = context_engine.register(device_id, msg)
@@ -118,6 +120,14 @@ async def _handle_json(device_id: str, msg: dict, send, pipeline: AudioPipeline,
         dialog.start_interaction()
         await pipeline.start_listening()
         await send({"type": "state", "state": "LISTENING"})
+    elif t == "texto":
+        # pedido escrito (testes e, no futuro, digitar em vez de falar)
+        texto = (msg.get("text") or "").strip()
+        if texto:
+            activity.begin()
+            dialog.start_interaction()
+            await send({"type": "stt_final", "text": texto})
+            await on_final_texto(texto)
     elif t == "mic_close":
         pipeline.set_idle()
         await send({"type": "state", "state": "IDLE"})

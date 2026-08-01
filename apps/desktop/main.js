@@ -10,7 +10,9 @@ const DEFAULT_HOST = '127.0.0.1:8040'
 let win = null
 let tray = null
 let hideTimer = null
-let pinned = false // aberto manualmente pela bandeja → não esconde sozinho
+let pinned = false      // aberto manualmente pela bandeja → não esconde sozinho
+let processando = false // ouvindo/pensando/executando
+let falando = false     // ainda tocando a resposta
 
 if (!app.isPackaged) {
   // dev não briga com a instância instalada (userData separado)
@@ -106,15 +108,23 @@ function createWindow(cfg) {
   })
 }
 
+function ocupado() {
+  return pinned || processando || falando
+}
+
 function showReactor() {
   clearTimeout(hideTimer)
   if (win && !win.isVisible()) win.showInactive() // sem roubar o foco do que você faz
 }
 
+// Só some quando REALMENTE terminou: enquanto estiver ouvindo, pensando,
+// executando ou falando a resposta, a janela fica na tela.
 function scheduleHide() {
   clearTimeout(hideTimer)
-  if (pinned) return
-  hideTimer = setTimeout(() => { if (win && !pinned) win.hide() }, 3000)
+  if (ocupado()) return
+  hideTimer = setTimeout(() => {
+    if (win && !ocupado()) win.hide()
+  }, 3000)
 }
 
 function buildTray(cfg) {
@@ -157,10 +167,21 @@ app.whenReady().then(() => {
     app.setLoginItemSettings({ openAtLogin: true })
   }
 
-  ipcMain.on('jarvis-wake', showReactor)
+  ipcMain.on('jarvis-wake', () => { processando = true; showReactor() })
   ipcMain.on('jarvis-state', (_e, state) => {
-    if (state === 'IDLE') { if (!pinned) scheduleHide() }
-    else showReactor()
+    if (state === 'IDLE') {
+      processando = false
+      scheduleHide()         // só esconde se também não estiver falando
+    } else {
+      processando = true     // LISTENING/THINKING/EXECUTING/DONE/ERROR
+      showReactor()
+    }
+  })
+  // enquanto está falando a resposta, segura a janela na tela
+  ipcMain.on('jarvis-speaking', (_e, on) => {
+    falando = !!on
+    if (on) showReactor()
+    else scheduleHide()
   })
   ipcMain.on('jarvis-pin', (_e, on) => {
     pinned = on
@@ -168,6 +189,7 @@ app.whenReady().then(() => {
     else scheduleHide()
   })
   ipcMain.on('jarvis-quit', () => { win.destroy(); app.quit() })
+  ipcMain.handle('jarvis-is-visible', () => !!win && win.isVisible())
 
   // validação (debug): JARVIS_DEBUG_SHOT=arquivo.png captura a janela no wake;
   // com JARVIS_DEBUG_SHOW=1 mostra e captura logo após carregar

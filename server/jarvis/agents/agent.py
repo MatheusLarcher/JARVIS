@@ -47,8 +47,11 @@ def _build():
         description="JARVIS, assistente pessoal do Matheus.",
         instruction=(
             "Você é o JARVIS, assistente pessoal residencial do Matheus, em português do Brasil. "
-            "Suas respostas serão faladas em voz alta: seja curto (1 a 2 frases), direto e natural, "
-            "sem markdown, sem listas, sem emojis. Use as ferramentas quando o pedido envolver a casa."
+            "Suas respostas são FALADAS em voz alta e cada palavra custa tempo de síntese: "
+            "responda em no máximo 2 frases curtas (idealmente até 30 palavras), direto ao ponto, "
+            "sem rodeios, sem repetir a pergunta, sem markdown, sem listas e sem emojis. "
+            "Não comece com saudações nem com 'Claro'. Vá direto à resposta. "
+            "Use as ferramentas quando o pedido envolver a casa."
         ),
         tools=[_tool_controlar_luz, _tool_temperatura, *load_toolsets()],
     )
@@ -56,32 +59,63 @@ def _build():
     _runner = Runner(agent=agent, app_name=APP, session_service=_session_service)
 
 
-async def ask(transcript: str, ctx: DeviceContext) -> str | None:
-    """Roda o agente e devolve o texto final da resposta."""
-    global _runner
-    if _runner is None:
-        _build()
-    from google.genai import types
-
+async def _montar_prompt(transcript: str, ctx: DeviceContext) -> str:
     history = await store.recent_history(ctx.device_id)
-    hist_txt = "\n".join(f"Usuário: {h['user']}\nJARVIS: {h['jarvis']}" for h in history if h["jarvis"])
-    prompt = (
+    hist_txt = "\n".join(f"Usuário: {h['user']}\nJARVIS: {h['jarvis']}"
+                         for h in history if h["jarvis"])
+    return (
         f"[contexto: dispositivo={ctx.device_id} ({ctx.device_type}), local={ctx.place}, "
         f"cômodo={ctx.room}]\n"
         + (f"[conversa recente]\n{hist_txt}\n" if hist_txt else "")
         + transcript
     )
+
+
+async def ask_stream(transcript: str, ctx: DeviceContext):
+    """Roda o agente e vai entregando o texto conforme ele escreve.
+
+    Isso é o que permite começar a falar antes do LLM terminar. Cada item é um
+    trecho NOVO de texto (não o acumulado).
+    """
+    global _runner
+    if _runner is None:
+        _build()
+    from google.adk.agents.run_config import RunConfig, StreamingMode
+    from google.genai import types
+
+    prompt = await _montar_prompt(transcript, ctx)
     session = await _session_service.create_session(app_name=APP, user_id=ctx.user_id)
     content = types.Content(role="user", parts=[types.Part(text=prompt)])
-    final = None
+    enviado = ""
     try:
-        async for event in _runner.run_async(user_id=ctx.user_id, session_id=session.id,
-                                             new_message=content):
-            if event.is_final_response() and event.content and event.content.parts:
-                final = "".join(p.text or "" for p in event.content.parts).strip()
+        async for event in _runner.run_async(
+                user_id=ctx.user_id, session_id=session.id, new_message=content,
+                run_config=RunConfig(streaming_mode=StreamingMode.SSE)):
+            if not (event.content and event.content.parts):
+                continue
+            texto = "".join(p.text or "" for p in event.content.parts)
+            if not texto:
+                continue
+            if getattr(event, "partial", False):
+                # o LLM entrega token a token e um token pode ser só um pedaço
+                # de palavra ("del"+"imit"+"ada") — nunca mexer no espaçamento
+                novo = texto[len(enviado):] if texto.startswith(enviado) else texto
+                if novo:
+                    enviado += novo
+                    yield novo
+            elif event.is_final_response():
+                # o final repete tudo: só emite o que faltou (comparação exata,
+                # sem strip, pra não comer espaços e colar palavras)
+                if texto.startswith(enviado):
+                    resto = texto[len(enviado):]
+                    if resto:
+                        enviado += resto
+                        yield resto
+                elif not enviado:
+                    enviado = texto
+                    yield texto
     except Exception:
         log.exception("agente falhou")
-        return None
     finally:
         # sessão é descartável (histórico vem do SQLite); sem isso vaza memória no 24/7
         try:
@@ -89,4 +123,10 @@ async def ask(transcript: str, ctx: DeviceContext) -> str | None:
                                                   session_id=session.id)
         except Exception:
             pass
-    return final or None
+
+
+async def ask(transcript: str, ctx: DeviceContext) -> str | None:
+    """Resposta completa (sem streaming) — usado em testes e como reserva."""
+    partes = [p async for p in ask_stream(transcript, ctx)]
+    texto = "".join(partes).strip()
+    return texto or None

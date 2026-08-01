@@ -179,6 +179,7 @@ export default function App() {
       }
       else if (msg.type === 'wake') {
         setHeard(''); setAnswer('')
+        playerRef.current?.resetQueue()       // nova pergunta, fila limpa
         window.jarvisDesktop?.wake()          // só acende o reator
       } else if (msg.type === 'ack') {
         playerRef.current?.playAck()          // "Sim?" local, sem rede nem LLM
@@ -189,8 +190,25 @@ export default function App() {
       } else if (msg.type === 'stt_partial' || msg.type === 'stt_final') {
         setHeard(msg.text)
       } else if (msg.type === 'speak') {
-        setAnswer(msg.text || '')
-        if (msg.audio_url) await playerRef.current?.playUrl(HTTP + msg.audio_url)
+        if (msg.seq === undefined) {
+          // resposta curta, veio inteira
+          setAnswer(msg.text || '')
+          if (msg.audio_url) await playerRef.current?.playUrl(HTTP + msg.audio_url)
+        } else {
+          // resposta em pedaços: vai falando enquanto o resto ainda é escrito
+          if (msg.seq === 0) {
+            playerRef.current?.resetQueue()   // começo de uma nova resposta
+            setAnswer(msg.text || '')
+            window.jarvisDesktop?.speaking(true)
+          } else {
+            setAnswer(a => (a ? a + ' ' : '') + (msg.text || ''))
+          }
+          playerRef.current?.enqueue(msg.seq, msg.audio_url && HTTP + msg.audio_url)
+        }
+      } else if (msg.type === 'speak_end') {
+        // avisa o app quando terminar de falar tudo (pra não sumir no meio)
+        playerRef.current?.setOnIdle(() => window.jarvisDesktop?.speaking(false))
+        if (!playerRef.current?.falando()) window.jarvisDesktop?.speaking(false)
       } else if (msg.type === 'ambient') {
         if (msg.temperature_c != null) setTemp(msg.temperature_c)
       }

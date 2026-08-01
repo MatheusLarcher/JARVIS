@@ -114,5 +114,44 @@ export function createPlayer() {
     return playBuffer(await ctx.decodeAudioData(buf))
   }
 
-  return { preloadAcks, playAck, playUrl, setOutput, resume: () => ctx.resume() }
+  // Fila de pedaços: a resposta chega picada (o Jarvis fala enquanto o LLM
+  // escreve) e precisa tocar na ordem, sem buracos nem sobreposição.
+  const fila = { proximo: 0, pendentes: new Map(), tocando: false, onIdle: null }
+
+  async function enqueue(seq, url) {
+    if (!url) return
+    ctx.resume()
+    // baixa e decodifica em paralelo; a ORDEM é garantida na hora de tocar
+    const p = fetch(url).then(r => r.arrayBuffer()).then(b => ctx.decodeAudioData(b))
+    fila.pendentes.set(seq, p)
+    drenar()
+  }
+
+  async function drenar() {
+    if (fila.tocando) return
+    fila.tocando = true
+    try {
+      while (fila.pendentes.has(fila.proximo)) {
+        const p = fila.pendentes.get(fila.proximo)
+        fila.pendentes.delete(fila.proximo)
+        fila.proximo++
+        try { await playBuffer(await p) } catch { /* pedaço falhou: segue */ }
+      }
+    } finally {
+      fila.tocando = false
+      if (!fila.pendentes.size && fila.onIdle) fila.onIdle()
+    }
+  }
+
+  function resetQueue() {
+    fila.proximo = 0
+    fila.pendentes.clear()
+  }
+
+  return {
+    preloadAcks, playAck, playUrl, setOutput, enqueue, resetQueue,
+    setOnIdle: (f) => { fila.onIdle = f },
+    falando: () => fila.tocando || fila.pendentes.size > 0,
+    resume: () => ctx.resume(),
+  }
 }

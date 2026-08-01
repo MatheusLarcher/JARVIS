@@ -30,6 +30,12 @@ def factory(name: str) -> SttEngine:
     if name == "nemotron":
         from .nemotron import NemotronStt
         return NemotronStt()
+    if name == "whisper":
+        from .whisper import WhisperStt
+        return WhisperStt()
+    if name == "hibrido":
+        from .hibrido import HibridoStt
+        return HibridoStt()
     if name == "dummy":
         from .dummy import DummyStt
         return DummyStt()

@@ -14,6 +14,12 @@ responses:
     - "Apagando."
     - "Pronto."
     - "Desligado."
+  # tocado enquanto o LLM ainda esta escrevendo (o 1o token demora ~6s):
+  # some da sensacao de travado sem custar nada, ja vem pre-gerado
+  thinking:
+    - "Um momento."
+    - "Deixa eu ver."
+    - "Verificando."
   not_understood:
     - "Desculpe, não entendi."
     - "Pode repetir?"

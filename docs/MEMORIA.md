@@ -115,6 +115,40 @@ Armadilha de teste: `Get-Process JARVIS` NÃO pega o app em dev (lá o processo 
 singleInstanceLock derruba a nova, fazendo parecer que a correção não funcionou.
 Filtrar por `Path` contendo o projeto (e nunca matar o Electron do agent-code).
 
+## STT híbrido + TTS em streaming + janela (2026-08-01)
+
+- **STT agora é híbrido** (`stt/hibrido.py`): Nemotron nas parciais (reator acende em
+  ~570 ms) + Whisper large-v3-turbo na final (WER 0.000 até com ruído, contra 0.062 do
+  Nemotron). Benchmark em `tests/bench_stt.py`, números em [STT.md](STT.md).
+- **TTS em streaming** (`tts/chunker.py` + `dialog._falar_em_stream`): consome o LLM em
+  stream e fala a partir de ~3 palavras; pedaços crescem até 14. O device toca em fila
+  por `seq`. Antes: 40 s de silêncio. Agora: fala quase imediata.
+- **"Um momento." pré-gerado** ao cair no LLM (o 1º token do DeepSeek demora ~6 s).
+- **Janela do PC** só some quando não está processando NEM falando (flags separadas
+  `processando`/`falando` em `main.js`; evento `speaking` pelo preload).
+
+Armadilhas descobertas aqui (todas custaram tempo):
+- Carregar Nemotron e Whisper EM PARALELO quebra o import de `transformers`
+  ("cannot import name 'AutoModel'") — carregar sequencial.
+- NeMo precisa de `transformers` 4.x; com 5.x nem importa.
+- O LLM entrega token a token e **parte palavras** ("del"+"imit"+"ada"): o chunker só
+  corta em limite de palavra real, usando posições do texto original (usar
+  `" ".join(palavras)` para calcular o corte desalinha os índices com o buffer).
+- `document.visibilityState` do Chromium NÃO muda quando a janela Electron é escondida
+  (com `backgroundThrottling: false`) — testar visibilidade perguntando ao main process
+  (`win.isVisible()` via `ipcMain.handle`).
+- No teste da janela, o app está ouvindo a sala de verdade e um barulho acorda o JARVIS
+  no meio da medição — o teste desliga o WebSocket do app durante a checagem.
+- Benchmark de STT com a GPU ocupada faz o Whisper cair pra CPU (45 s/frase vs 0,7 s).
+
+## Disco C: encheu (2026-08-01)
+
+O C: chegou a **0 GB livres** — isso corrompeu downloads de modelos (chatterbox `ve.pt`,
+parakeet, whisper) e a instalação do `transformers`, causando erros que pareciam de
+código. O cache do HuggingFace (50 GB) foi movido para `D:\ai-cache\huggingface` e
+`HF_HOME` está setado na conta do usuário E nos dois `.bat` (sem isso o cache volta pro
+C: e baixa tudo de novo). C: ficou com ~65 GB livres.
+
 ## Decisões e aprendizados importantes
 
 - **Wake word e VAD são STATEFUL → uma instância POR CONEXÃO** (`AudioPipeline.init()`).

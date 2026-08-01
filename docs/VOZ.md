@@ -52,15 +52,42 @@ de 1.000; o script usa o encoder treinado que vem dentro do modelo (`model.ve`).
 
 ## Latência
 
-Geração é lenta (RTF ~4: 2,5 s de fala levam ~10 s). Por isso:
+Gerar a voz clonada é mais lento que o tempo real (RTF ~1,7–2,5 com o modelo já
+aquecido). Quatro coisas escondem isso:
 
 1. **biblioteca pré-gerada** cobre as respostas de comando → instantâneo;
-2. **cache por hash** (`server/data/tts_cache`) reaproveita qualquer frase repetida;
+2. **cache por hash** (`server/data/tts_cache`) reaproveita qualquer frase repetida
+   (pergunta repetida = resposta imediata);
 3. **aquecedor de cache** (`tts/warmer.py`) mantém sempre pronta a frase da hora atual, do
-   minuto seguinte e da temperatura — perguntar as horas responde na hora.
+   minuto seguinte e da temperatura — perguntar as horas responde na hora;
+4. **fala em streaming** (abaixo) — a mais importante para respostas do LLM.
 
-Só frase inédita (resposta do LLM) paga a geração. Se o serviço de voz estiver fora, o
-perfil cai automaticamente pro `jarvis_edge` (edge-tts) pra nunca ficar mudo.
+Se o serviço de voz estiver fora, o perfil cai automaticamente pro `jarvis_edge`
+(edge-tts) pra nunca ficar mudo.
+
+## Falar enquanto o LLM ainda escreve
+
+Esperar a resposta inteira antes de gerar o áudio custava **até 40 s de silêncio**.
+Agora o texto do LLM é consumido em stream e cortado em pedaços faláveis
+(`tts/chunker.py`): o primeiro sai com ~3 palavras (a voz começa logo) e os
+seguintes crescem até 14 (prosódia melhor, menos chamadas). Cada pedaço vira áudio
+e o dispositivo toca **em fila, na ordem** (`speak` com `seq`, `speak_end` no fim).
+
+Além disso, ao cair no LLM o JARVIS solta na hora um "Um momento." pré-gerado —
+o primeiro token do modelo demora ~6 s e isso tira a sensação de travado.
+
+Medido (pergunta inédita, resposta de 40 palavras):
+
+| | antes | agora |
+|---|---|---|
+| começa a falar | ~40 s | **~0 s** (aviso) / ~6 s (resposta) |
+| termina | ~40 s | ~40 s |
+
+Ajustes em `config/settings.yml → tts`: `stream_primeiras_palavras` (3) e
+`stream_max_palavras` (14). Teste: `python tests/test_tts_stream.py "pergunta"`.
+
+Como o RTF é maior que 1, respostas longas saem em blocos com pequenas pausas —
+por isso o agente é instruído a responder em no máximo 2 frases curtas.
 
 ## Subir o serviço
 

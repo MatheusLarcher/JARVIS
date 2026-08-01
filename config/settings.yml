@@ -33,8 +33,12 @@ vad:
   max_utterance_s: 12.0
 
 stt:
-  engine: nemotron       # nemotron | dummy
+  # hibrido = Nemotron nas parciais (rapido, acende o reator ao ouvir "Jarvis")
+  #           + Whisper na transcricao final (acerta o comando ate com ruido)
+  engine: hibrido        # hibrido | nemotron | whisper | dummy
   model: nvidia/nemotron-3.5-asr-streaming-0.6b
+  whisper_model: large-v3-turbo
+  whisper_compute_type: float16
   language: pt-BR
   chunk_ms: 160
   device: cuda
@@ -61,6 +65,10 @@ tts:
   library_dir: server/data/library
   # mantem sempre no cache as frases previsiveis (hora/temperatura)
   cache_warmer: true
+  # fala enquanto o LLM ainda escreve: o 1o pedaco sai com poucas palavras
+  # (voz comeca rapido) e os seguintes crescem (prosodia melhor)
+  stream_primeiras_palavras: 3
+  stream_max_palavras: 14
 
 llm:
   # LiteLLM model string - trocavel sem tocar codigo
