@@ -23,4 +23,6 @@ contextBridge.exposeInMainWorld('jarvisDesktop', {
   // visibilidade REAL da janela (o visibilityState do Chromium não muda com
   // backgroundThrottling desligado) — usado pelos testes
   isVisible: () => ipcRenderer.invoke('jarvis-is-visible'),
+  windowInfo: () => ipcRenderer.invoke('jarvis-window-info'),
+  focus: () => ipcRenderer.send('jarvis-focus'),
 })

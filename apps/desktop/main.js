@@ -110,6 +110,11 @@ function createWindow(cfg) {
 
   win.on('close', (e) => { e.preventDefault(); win.hide() })
 
+  // clicou fora → fica translúcida; clicou nela → volta ao normal
+  win.on('blur', () => aplicaOpacidade())
+  win.on('focus', () => aplicaOpacidade())
+  win.on('show', () => aplicaOpacidade(false))
+
   // guarda onde você deixou a janela (senão ela volta pro centro toda vez)
   let salvarTimer = null
   win.on('moved', () => {
@@ -141,9 +146,44 @@ function ocupado() {
   return pinned || processando || falando
 }
 
+// ---- transparência: sai da frente quando você está usando outra coisa ----
+const OPACIDADE = {
+  focado: 1.0,      // você clicou nele
+  atendendo: 0.92,  // sem foco, mas está te respondendo
+  parado: 0.28,     // sem foco e ocioso: dá pra ler o que está atrás
+}
+let fadeTimer = null
+
+function opacidadeAlvo() {
+  if (!win) return 1
+  if (win.isFocused()) return OPACIDADE.focado
+  if (processando || falando) return OPACIDADE.atendendo
+  return OPACIDADE.parado
+}
+
+function aplicaOpacidade(suave = true) {
+  if (!win) return
+  clearInterval(fadeTimer)
+  const alvo = opacidadeAlvo()
+  if (!suave) { win.setOpacity(alvo); return }
+  // transição curta pra não "piscar" na tela
+  fadeTimer = setInterval(() => {
+    if (!win || win.isDestroyed()) return clearInterval(fadeTimer)
+    const atual = win.getOpacity()
+    const passo = 0.08
+    if (Math.abs(alvo - atual) <= passo) {
+      win.setOpacity(alvo)
+      clearInterval(fadeTimer)
+    } else {
+      win.setOpacity(atual + Math.sign(alvo - atual) * passo)
+    }
+  }, 16)
+}
+
 function showReactor() {
   clearTimeout(hideTimer)
   if (win && !win.isVisible()) win.showInactive() // sem roubar o foco do que você faz
+  aplicaOpacidade()
 }
 
 // Só some quando REALMENTE terminou: enquanto estiver ouvindo, pensando,
@@ -201,6 +241,7 @@ app.whenReady().then(() => {
     if (state === 'IDLE') {
       processando = false
       scheduleHide()         // só esconde se também não estiver falando
+      aplicaOpacidade()      // terminou: pode ficar translúcida de novo
     } else {
       processando = true     // LISTENING/THINKING/EXECUTING/DONE/ERROR
       showReactor()
@@ -210,7 +251,7 @@ app.whenReady().then(() => {
   ipcMain.on('jarvis-speaking', (_e, on) => {
     falando = !!on
     if (on) showReactor()
-    else scheduleHide()
+    else { scheduleHide(); aplicaOpacidade() }
   })
   ipcMain.on('jarvis-pin', (_e, on) => {
     pinned = on
@@ -225,6 +266,13 @@ app.whenReady().then(() => {
   })
   ipcMain.on('jarvis-quit', () => { win.destroy(); app.quit() })
   ipcMain.handle('jarvis-is-visible', () => !!win && win.isVisible())
+  ipcMain.on('jarvis-focus', () => { if (win) win.focus() })
+  ipcMain.handle('jarvis-window-info', () => ({
+    visivel: !!win && win.isVisible(),
+    focada: !!win && win.isFocused(),
+    opacidade: win ? Math.round(win.getOpacity() * 100) / 100 : null,
+    processando, falando, pinned,
+  }))
 
   // validação (debug): JARVIS_DEBUG_SHOT=arquivo.png captura a janela no wake;
   // com JARVIS_DEBUG_SHOW=1 mostra e captura logo após carregar

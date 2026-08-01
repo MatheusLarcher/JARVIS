@@ -57,6 +57,12 @@ não abrir fora da tela). O **X** no canto superior direito recolhe pra bandeja 
 JARVIS continua ouvindo. ESC e o clique na bandeja também escondem; o menu da
 bandeja tem "Iniciar com o Windows" e "Sair" (esse sim encerra).
 A janela nunca some sozinha enquanto está ouvindo, pensando, executando ou falando.
+
+**Transparência**: quando você clica em outra janela, ela fica bem translúcida
+(opacidade 0,28) pra não atrapalhar a leitura do que está atrás; ao clicar nela volta
+a ficar opaca. Se o JARVIS estiver te respondendo, ela sobe pra 0,92 mesmo sem foco —
+senão você não conseguiria ler a resposta. Os valores estão em `OPACIDADE`, no
+`apps/desktop/main.js`.
 Engrenagem (canto superior esquerdo da janela) abre as configurações: escolher um ou
 VÁRIOS microfones (todos capturam juntos — as fontes são somadas num único stream),
 dispositivo de saída (`AudioContext.setSinkId`) e o botão "Fechar o JARVIS".

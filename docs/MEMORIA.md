@@ -141,6 +141,22 @@ Armadilhas descobertas aqui (todas custaram tempo):
   no meio da medição — o teste desliga o WebSocket do app durante a checagem.
 - Benchmark de STT com a GPU ocupada faz o Whisper cair pra CPU (45 s/frase vs 0,7 s).
 
+## Janela do PC: arrastar, ocultar e transparência (2026-08-01)
+
+- Arrasta por qualquer ponto vazio (`-webkit-app-region: drag` no `.stage.desktop`);
+  os controles precisam de `no-drag` senão param de receber clique.
+- Botão X recolhe pra bandeja (IPC `jarvis-hide`), não encerra.
+- Posição salva em `config.json` (evento `moved`, com debounce) e restaurada checando
+  se ainda cabe em algum monitor.
+- **Opacidade por foco** (`main.js → OPACIDADE`): 1.0 focada, 0.92 sem foco mas
+  respondendo, 0.28 sem foco e parada. Transição suave por `setInterval`.
+
+Armadilha nos testes de janela: abrir outro app NÃO garante troca de foco a tempo —
+o teste ficava reportando `focada: True` e falhando à toa. Só ficou confiável com
+`Start-Process -PassThru` + `WScript.Shell.AppActivate($p.Id)` em loop, e esperando o
+foco mudar de verdade antes de medir. Para saber o estado real da janela existe o IPC
+`jarvis-window-info` (visível/focada/opacidade/processando/falando).
+
 ## Disco C: encheu (2026-08-01)
 
 O C: chegou a **0 GB livres** — isso corrompeu downloads de modelos (chatterbox `ve.pt`,
