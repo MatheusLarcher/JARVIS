@@ -50,8 +50,13 @@ APKs prontos ficam em `releases/Jarvis.apk` e `releases/Jarvis-Watch.apk`.
 `%LOCALAPPDATA%\Programs\jarvis-desktop\`, registra auto-start no logon e guarda a config em
 `%APPDATA%\jarvis-desktop\config.json` (host/device/token — o token é preenchido sozinho a
 partir do `devices.yml` se o projeto estiver em `~\Documents\GitHub\JARVIS`).
-Uso: ícone fica oculto na bandeja; "Hey Jarvis" abre a janela do reator; ESC ou clique na
-bandeja esconde; menu da bandeja tem "Iniciar com o Windows" e "Sair".
+Uso: ícone fica oculto na bandeja; falar "Jarvis" abre a janela do reator.
+A janela é **arrastável por qualquer ponto vazio** (não tem barra de título) e
+**lembra onde você deixou** (posição em `config.json`, com checagem de monitor pra
+não abrir fora da tela). O **X** no canto superior direito recolhe pra bandeja — o
+JARVIS continua ouvindo. ESC e o clique na bandeja também escondem; o menu da
+bandeja tem "Iniciar com o Windows" e "Sair" (esse sim encerra).
+A janela nunca some sozinha enquanto está ouvindo, pensando, executando ou falando.
 Engrenagem (canto superior esquerdo da janela) abre as configurações: escolher um ou
 VÁRIOS microfones (todos capturam juntos — as fontes são somadas num único stream),
 dispositivo de saída (`AudioContext.setSinkId`) e o botão "Fechar o JARVIS".

@@ -254,6 +254,11 @@ export default function App() {
       {started && (
         <button className="gear" title="Configurações" onClick={openConfig}>⚙</button>
       )}
+      {DESKTOP && (
+        <button className="win-close"
+          title="Ocultar (o JARVIS continua ouvindo na bandeja)"
+          onClick={() => window.jarvisDesktop?.hide()}>✕</button>
+      )}
       {showConfig && (
         <ConfigModal devices={devices} prefs={prefs}
           onSave={(p) => { savePrefs(p); closeConfig() }}

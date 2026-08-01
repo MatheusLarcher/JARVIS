@@ -106,7 +106,51 @@ canvas.reactor { display: block; }
   border: 1px solid rgba(33, 212, 243, 0.14);
   box-shadow: 0 0 60px rgba(33, 212, 243, 0.10);
   overflow: hidden;
+  /* a janela não tem barra de título: arrastar por qualquer ponto vazio */
+  -webkit-app-region: drag;
+  cursor: grab;
 }
+.stage.desktop:active { cursor: grabbing; }
+
+/* o que é clicável não pode arrastar junto */
+.stage.desktop .gear,
+.stage.desktop .win-close,
+.stage.desktop .modal-backdrop,
+.stage.desktop .modal,
+.stage.desktop .modal *,
+.stage.desktop .tap-hint {
+  -webkit-app-region: no-drag;
+  cursor: default;
+}
+.stage.desktop .gear,
+.stage.desktop .win-close { cursor: pointer; }
+
+/* botão de ocultar: discreto, aparece de verdade só no hover */
+.win-close {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.9rem;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  border-radius: 7px;
+  color: #2a5561;
+  font-size: 0.8rem;
+  opacity: 0.45;
+  transition: all 0.25s ease;
+  padding: 0;
+}
+.win-close:hover {
+  opacity: 1;
+  color: #ff8a8a;
+  background: rgba(255, 82, 82, 0.12);
+}
+/* com o X no canto, o indicador de conexão sai da frente */
+.stage.desktop .status-chip { top: 1.05rem; right: 3rem; }
 body:has(.stage.desktop) { background: transparent; }
 html:has(.stage.desktop) { background: transparent; }
 .stage.desktop .hud .clock { font-size: 2.2rem; }

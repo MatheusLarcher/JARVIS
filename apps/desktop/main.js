@@ -51,17 +51,36 @@ function readConfig() {
       } catch { }
     }
   }
-  try { fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2)) } catch { }
+  salvaConfig(cfg)
   return cfg
 }
 
-function createWindow(cfg) {
+function salvaConfig(cfg) {
+  try {
+    fs.writeFileSync(path.join(app.getPath('userData'), 'config.json'),
+                     JSON.stringify(cfg, null, 2))
+  } catch { }
+}
+
+function posicaoInicial(cfg) {
   const { width } = screen.getPrimaryDisplay().workAreaSize
+  const padrao = { x: Math.round(width / 2 - 230), y: 120 }
+  const salva = cfg.janela
+  if (!salva || typeof salva.x !== 'number') return padrao
+  // se o monitor mudou, a posição salva pode ter ficado fora da tela
+  const cabe = screen.getAllDisplays().some(d =>
+    salva.x + 200 > d.bounds.x && salva.x + 260 < d.bounds.x + d.bounds.width &&
+    salva.y + 60 > d.bounds.y && salva.y + 60 < d.bounds.y + d.bounds.height)
+  return cabe ? salva : padrao
+}
+
+function createWindow(cfg) {
+  const pos = posicaoInicial(cfg)
   win = new BrowserWindow({
     width: 460,
     height: 520,
-    x: Math.round(width / 2 - 230),
-    y: 120,
+    x: pos.x,
+    y: pos.y,
     show: false,
     frame: false,
     transparent: true,
@@ -90,6 +109,16 @@ function createWindow(cfg) {
   }
 
   win.on('close', (e) => { e.preventDefault(); win.hide() })
+
+  // guarda onde você deixou a janela (senão ela volta pro centro toda vez)
+  let salvarTimer = null
+  win.on('moved', () => {
+    clearTimeout(salvarTimer)
+    salvarTimer = setTimeout(() => {
+      const [x, y] = win.getPosition()
+      salvaConfig({ ...cfg, janela: { x, y } })
+    }, 600)
+  })
   win.webContents.on('before-input-event', (_e, input) => {
     if (input.key === 'Escape') win.hide()
   })
@@ -187,6 +216,12 @@ app.whenReady().then(() => {
     pinned = on
     if (on) { clearTimeout(hideTimer); if (!win.isVisible()) win.show() }
     else scheduleHide()
+  })
+  ipcMain.on('jarvis-hide', () => {
+    // fechar aqui = recolher pra bandeja (o JARVIS continua ouvindo)
+    pinned = false
+    clearTimeout(hideTimer)
+    if (win) win.hide()
   })
   ipcMain.on('jarvis-quit', () => { win.destroy(); app.quit() })
   ipcMain.handle('jarvis-is-visible', () => !!win && win.isVisible())
