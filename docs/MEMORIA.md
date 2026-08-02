@@ -305,6 +305,27 @@ reiniciar caiu de 3,43s pra 1,74s.
 Armadilha: aquecer com `max_tokens=1` **não funciona** em modelo de raciocínio — ele pensa
 antes de escrever e estoura o limite ("Could not finish the message"). Usar ~32.
 
+## Parakeet TDT v3 testado e descartado por ora (2026-08-02) — ver [STT.md](STT.md)
+
+Medido com a GPU livre, mesmas 24 amostras: **velocidade empatada** (0,14s x 0,16s do
+Whisper) e **pior no que decide** — escreve "Jarvis" em 11/24 contra 24/24, acorda o
+assistente em 20/24 contra 24/24.
+
+O motivo não é qualidade do modelo, é estrutural: o Whisper aceita `initial_prompt` +
+`hotwords` (o que leva o small de 14/24 pra 24/24) e o Parakeet, sendo transducer, não tem
+gancho de texto. O equivalente seria *word boosting* do NeMo — mas o NeMo instalado **não
+expõe isso** no `decoding` (só `strategy, model_type, durations, greedy, beam`). Pelo NeMo
+ele ainda ficou mais lento (0,42s) e pior (1/8).
+
+Notas práticas:
+- Precisa de `transformers >= 5.10`; o env `jarvis` está pinado em 4.x por causa do NeMo.
+  Rodar no `jarvis-llm` (transformers 5.14).
+- `ParakeetForTDT.generate()` devolve `ParakeetRNNTGenerateOutput(sequences, durations)`:
+  passar o objeto inteiro pro `batch_decode` estoura com `'str' object cannot be
+  interpreted as an integer`; e sem `skip_special_tokens=True` o texto vem com `<blank>`.
+- A favor dele, e que continua valendo: **transducer não alucina em silêncio** como o
+  Whisper (que já criou pedido fantasma repetindo o próprio prompt).
+
 ## Decisões e aprendizados importantes
 
 - **Wake word e VAD são STATEFUL → uma instância POR CONEXÃO** (`AudioPipeline.init()`).

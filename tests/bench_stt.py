@@ -130,14 +130,15 @@ def motor_nemotron():
     return stt.transcribe
 
 
-def _whisper(tamanho: str, hotwords=False, prompt=False, beam=1):
+def _whisper(tamanho: str, hotwords=False, prompt=False, beam=1, prompt_texto=None):
     """hotwords e initial_prompt são medidos SEPARADOS: um deles custa caro."""
     from faster_whisper import WhisperModel
 
     from jarvis.stt.whisper import _hotwords_padrao
     m = WhisperModel(tamanho, device="cuda", compute_type="float16")
     hot = _hotwords_padrao() if hotwords else None
-    ctx = ("Conversa com o assistente de voz Jarvis. "
+    ctx = (prompt_texto or
+           "Conversa com o assistente de voz Jarvis. "
            "Exemplos: Jarvis, liga a luz da sala. Jarvis, que horas são?"
            ) if prompt else None
 
@@ -174,6 +175,50 @@ def motor_whisper_small_hot():
     return _whisper("small", hotwords=True)
 
 
+def motor_whisper_prod():
+    """EXATAMENTE o que roda hoje: small + hotwords + o prompt curto.
+
+    O prompt daqui é o do settings.yml, não o dos outros motores: frases de
+    exemplo no prompt faziam o modelo ALUCINAR o exemplo (ele transcreveu
+    "Jarvis, abre o navegador" com o áudio dizendo "liga a luz da sala").
+    """
+    from jarvis.config import config
+    texto = config.settings["stt"].get("initial_prompt") or "Falando com o Jarvis."
+    return _whisper("small", hotwords=True, prompt=True, prompt_texto=texto)
+
+
+def motor_parakeet():
+    """NVIDIA Parakeet TDT 0.6B v3 — multilíngue (PT incluído), transducer.
+
+    Precisa de transformers >= 5.10, então NÃO roda no env `jarvis` (que está
+    pinado em 4.x por causa do NeMo). Rode este bench no env `jarvis-llm`:
+        ~/miniconda3/envs/jarvis-llm/python.exe tests/bench_stt.py parakeet
+    """
+    import torch
+    from transformers import ParakeetForTDT, ParakeetProcessor
+
+    nome = "nvidia/parakeet-tdt-0.6b-v3"
+    proc = ParakeetProcessor.from_pretrained(nome)
+    modelo = ParakeetForTDT.from_pretrained(nome)
+    if torch.cuda.is_available():
+        modelo = modelo.cuda()
+    modelo.eval()
+
+    def go(audio):
+        entradas = proc(audio, sampling_rate=16000, return_tensors="pt")
+        entradas = {k: (v.cuda() if torch.cuda.is_available() and hasattr(v, "cuda")
+                        else v) for k, v in entradas.items()}
+        with torch.no_grad():
+            saida = modelo.generate(**entradas)
+        # generate() devolve ParakeetRNNTGenerateOutput(sequences, durations);
+        # sem skip_special_tokens o texto vem cheio de <blank>
+        texto = proc.batch_decode(saida.sequences, skip_special_tokens=True)
+        if isinstance(texto, list):
+            texto = texto[0] if texto else ""
+        return (getattr(texto, "text", texto) or "").strip()
+    return go
+
+
 def motor_canary():
     import nemo.collections.asr as nemo_asr
     import torch
@@ -202,6 +247,8 @@ MOTORES = {
     "whisper_so_prompt": motor_whisper_so_prompt,
     "whisper_small": motor_whisper_small,
     "whisper_small_hot": motor_whisper_small_hot,
+    "whisper_prod": motor_whisper_prod,
+    "parakeet": motor_parakeet,
     "canary": motor_canary,
 }
 
