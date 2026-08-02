@@ -37,9 +37,10 @@ def bench_configurado():
     from jarvis.config import config
     from litellm import acompletion
 
+    from jarvis.agents.agent import _extras_llm
     cfg = config.settings["llm"]
     modelo = cfg["model"]
-    extras = {"api_base": cfg["api_base"]} if cfg.get("api_base") else {}
+    extras = _extras_llm(cfg)
 
     async def uma(pergunta):
         t0 = time.perf_counter()
@@ -117,10 +118,11 @@ def main():
     print(f"\n=== {nome} ===")
     primeiros, totais = [], []
     for pergunta, (p, t, texto) in zip(PERGUNTAS, resultados):
-        primeiros.append(p or t)
+        primeiros.append(p if p is not None else t)
         totais.append(t)
         print(f"\n  {pergunta}")
-        print(f"    1ª palavra em {p:.2f}s | completa em {t:.2f}s")
+        marca = f"{p:.2f}s" if p is not None else "(não emitiu texto)"
+        print(f"    1ª palavra em {marca} | completa em {t:.2f}s")
         print(f"    {texto[:180]!r}")
     print(f"\n  MÉDIA: primeira palavra {np.mean(primeiros):.2f}s | "
           f"resposta completa {np.mean(totais):.2f}s")

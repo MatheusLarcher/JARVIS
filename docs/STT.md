@@ -2,34 +2,59 @@
 
 ## O que está em uso
 
-`config/settings.yml → stt.engine: hibrido` — dois modelos, cada um no que faz melhor:
+`config/settings.yml → stt.engine: whisper` — **um modelo só**, o `small` com
+`initial_prompt`. Ele faz as duas coisas: gera as parciais (re-transcrevendo o
+trecho em andamento a cada 0,45s, que é o que acende o reator cedo) e a
+transcrição final que vira comando.
 
-| Papel | Modelo | Por quê |
-|---|---|---|
-| Transcrições **parciais** | `nvidia/nemotron-3.5-asr-streaming-0.6b` | rápido; é o que reconhece "Jarvis" e acende o reator ainda no meio da frase |
-| Transcrição **final** (vira comando) | `faster-whisper large-v3-turbo` | acerta o comando mesmo com ruído/eco |
+Trocar: `stt.engine` aceita `whisper`, `hibrido` (Nemotron nas parciais +
+Whisper na final), `nemotron` ou `dummy`.
 
-Trocar: `stt.engine` aceita `hibrido`, `nemotron`, `whisper` ou `dummy`.
+## Por que um modelo só (medição, não achismo)
 
-## Por que assim (medição, não achismo)
+`python tests/bench_stt.py` gera 8 frases com o nome no meio, em 3 vozes, e cria
+três condições: limpa, com ruído e "microfone do outro lado da sala". Mede o que
+importa: **reconhece a chamada?** e **acerta o comando?**
 
-`python tests/bench_stt.py` gera frases em vozes diferentes, cria uma versão "sala real"
-(volume baixo + eco + filtro) e mede WER e tempo. Resultado nesta máquina (RTX 5050):
-
-| motor | WER limpo | WER com ruído | s/frase |
+| motor | reconhece a chamada (difícil) | erro no comando (difícil) | s/frase |
 |---|---|---|---|
-| whisper large-v3-turbo | **0.000** | **0.000** | 0,70 |
-| nemotron 3.5 streaming | 0.016 | 0.062 | 0,47 |
-| parakeet-tdt-0.6b-v3 | 0.135 | 0.146 | 1,73 |
+| **whisper small + prompt** | **8/8** | 0,242 | **0,12** |
+| whisper medium + prompt | 8/8 | 0,108 | 8,23 |
+| whisper large-v3-turbo | 5/8 | 0,505 | 14,73 |
+| nemotron 3.5 streaming | 2/8 | 0,573 | 0,10 |
+| canary-1b-v2 | 3/8 | 1,038 | 1,90 |
+| distil-large-v3 | 1/8 | 1,029 | 10,05 |
 
-O Whisper acerta tudo, mas não é streaming (precisa da fala inteira) — daí o híbrido.
+Dois motivos para não manter dois modelos:
 
-Latência medida no fluxo real: reator acende **~570 ms** depois de você começar a falar;
-comando executado ~2,3 s após terminar a frase.
+1. O `small` é **tão rápido quanto** o modelo "rápido" (0,12s x 0,10s) e reconhece
+   o nome muito melhor (8/8 x 2/8). Um modelo a menos = menos VRAM e menos
+   coisa para dar errado.
+2. O `large-v3-turbo`, que era a peça de qualidade, **não roda bem nesta placa**:
+   14,7s por frase na GPU (4,7s na CPU!). Faltam kernels otimizados no
+   CTranslate2 para esta arquitetura. Confirmado em `tests/diag_whisper_gpu.py`.
 
-> Atenção ao rodar o benchmark: se a GPU estiver ocupada, o Whisper cai para CPU e o
-> tempo salta para ~45 s por frase (foi o que aconteceu na primeira medição). Rode com
-> os serviços parados.
+Latência no fluxo real: reator acende **0,48s** depois de você começar a falar;
+comando executado **0,14s** depois de terminar a frase.
+
+> Atenção ao medir: com a GPU disputada os números mentem feio — o mesmo
+> large-v3-turbo marcou 0,28s numa medição suja e 14,7s numa limpa. Pare os
+> serviços antes de rodar benchmark de modelo.
+
+## O nome "Jarvis" precisa ser ensinado ao modelo
+
+Sem `initial_prompt`, o STT escreve o nome como "Já Luiz", "Jairus", "Já vi" —
+e o assistente simplesmente te ignora. Com o prompt, 8/8 no áudio difícil contra
+0/8 sem ele. No `small` isso não custa tempo (0,12s x 0,14s); no turbo custava
+segundos.
+
+Configurável em `settings.yml → stt.initial_prompt` e `stt.hotwords`
+(o padrão é montado com o nome + os cômodos de `house.yml`).
+
+Como rede de segurança, o reconhecedor (`audio/wakeword.py`) ainda aceita o nome
+mal transcrito **quando vem seguido de um comando conhecido** — assim
+"Já, Luiz. Acende a luz da sala" funciona, mas a TV falando "já vi esse filme"
+não acorda o assistente.
 
 ## Armadilhas conhecidas
 

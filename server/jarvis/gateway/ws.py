@@ -9,6 +9,7 @@ import logging
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from .. import activity
+from ..agents import agent as adk_agent
 from ..audio.pipeline import AudioPipeline
 from ..config import config
 from ..context.engine import context_engine
@@ -48,6 +49,8 @@ async def ws_device(websocket: WebSocket, device_id: str, token: str | None = No
 
     async def on_wake():
         activity.begin()
+        # acorda a GPU agora, enquanto o comando ainda está sendo falado
+        asyncio.create_task(adk_agent.despertar_gpu())
         dialog.start_interaction()
         # só acende o reator; o "Sim?" vem no ack (pode nem vir, se o comando
         # tiver sido dito na mesma frase)

@@ -4,7 +4,9 @@ LLM via LiteLlm (provedor trocável em config/settings.yml → llm.model).
 Ferramentas: controle da casa e informações; MCPs entram aqui no futuro
 (jarvis/mcp/ → MCPToolset do ADK).
 """
+import asyncio
 import logging
+import time
 
 from ..config import config
 from ..context.engine import DeviceContext
@@ -31,6 +33,22 @@ async def _tool_controlar_luz(acao: str, comodo: str) -> dict:
 async def _tool_temperatura() -> dict:
     """Retorna a temperatura ambiente atual em graus Celsius."""
     return {"temperatura_c": await ha.temperature()}
+
+
+def _extras_llm(cfg: dict) -> dict:
+    """Parâmetros que vão junto em toda chamada ao modelo."""
+    extras = {}
+    if cfg.get("api_base"):
+        # sem isto o LiteLLM tenta a nuvem em vez do Ollama local
+        extras["api_base"] = cfg["api_base"]
+    if cfg.get("no_think"):
+        # o Qwen3.x gasta a resposta inteira "pensando" e devolve texto VAZIO;
+        # medido: 3,39s e nada contra 0,29s com resposta
+        extras["think"] = False
+    if cfg.get("max_tokens"):
+        # resposta curta também encurta a síntese de voz, que é o gargalo
+        extras["max_tokens"] = int(cfg["max_tokens"])
+    return extras
 
 
 class _FiltroPensamento:
@@ -100,11 +118,9 @@ def _build():
     from google.adk.sessions import InMemorySessionService
 
     llm_cfg = config.settings["llm"]
-    # api_base é o que aponta pro Ollama local; sem ele o LiteLLM tenta a nuvem
-    extras = {"api_base": llm_cfg["api_base"]} if llm_cfg.get("api_base") else {}
     agent = Agent(
         name="jarvis",
-        model=LiteLlm(model=llm_cfg["model"], **extras),
+        model=LiteLlm(model=llm_cfg["model"], **_extras_llm(llm_cfg)),
         description="JARVIS, assistente pessoal do Matheus.",
         instruction=_instrucao(llm_cfg),
         tools=[_tool_controlar_luz, _tool_temperatura, *load_toolsets()],
@@ -124,24 +140,66 @@ async def aquecer():
             _build()
         from litellm import acompletion
         cfg = config.settings["llm"]
-        extras = {"api_base": cfg["api_base"]} if cfg.get("api_base") else {}
         # com modelo local, esta chamada também tira o modelo do disco e o
         # deixa carregado — a primeira pergunta de verdade já sai rápida
         await acompletion(model=cfg["model"],
                           messages=[{"role": "user", "content": "oi"}],
-                          max_tokens=1, **extras)
+                          max_tokens=1, **_extras_llm(cfg))
         log.info("agente pronto (aquecido): %s", cfg["model"])
     except Exception as e:
         log.warning("não deu pra aquecer o agente agora: %s", e)
 
 
+_ultimo_despertar = 0.0
+
+
+async def despertar_gpu():
+    """Tira a GPU do modo econômico assim que você chama o JARVIS.
+
+    A placa cai pra 225 MHz quando fica parada e a primeira inferência paga o
+    "acordar": medido 2,61s contra 0,80s com ela desperta. Como isso roda no
+    wake, a GPU acorda enquanto você ainda está falando o comando — de graça.
+    """
+    global _ultimo_despertar
+    agora = time.monotonic()
+    if agora - _ultimo_despertar < 5:      # já acordou há pouco
+        return
+    _ultimo_despertar = agora
+    async def llm():
+        from litellm import acompletion
+        cfg = config.settings["llm"]
+        extras = {**_extras_llm(cfg), "max_tokens": 1}
+        await acompletion(model=cfg["model"],
+                          messages=[{"role": "user", "content": "oi"}], **extras)
+
+    async def voz():
+        import httpx
+        url = config.settings["tts"]["voice_profiles"]["jarvis_br"].get("service_url")
+        if url:
+            async with httpx.AsyncClient(timeout=10) as c:
+                await c.post(f"{url}/aquecer")
+
+    # os dois usam a mesma GPU; acorda em paralelo e ignora falha
+    await asyncio.gather(llm(), voz(), return_exceptions=True)
+
+
 async def _montar_prompt(transcript: str, ctx: DeviceContext) -> str:
-    history = await store.recent_history(ctx.device_id)
-    hist_txt = "\n".join(f"Usuário: {h['user']}\nJARVIS: {h['jarvis']}"
-                         for h in history if h["jarvis"])
+    """Prompt curto de propósito: em modelo pequeno, cada linha a mais atrasa
+    a primeira palavra (medido: histórico gordo levou o tempo de 0,4s a 2,4s)."""
+    cfg = config.settings["llm"]
+    trocas = int(cfg.get("historico_trocas", 2))
+    limite = int(cfg.get("historico_max_chars", 160))
+
+    history = await store.recent_history(ctx.device_id, limit=trocas) if trocas else []
+    linhas = []
+    for h in history:
+        if not h["jarvis"]:
+            continue
+        resposta = h["jarvis"][:limite]
+        linhas.append(f"Usuário: {h['user'][:limite]}\nJARVIS: {resposta}")
+    hist_txt = "\n".join(linhas)
     return (
-        f"[contexto: dispositivo={ctx.device_id} ({ctx.device_type}), local={ctx.place}, "
-        f"cômodo={ctx.room}]\n"
+        f"[dispositivo={ctx.device_type}, local={ctx.place}, cômodo={ctx.room}]\n"
         + (f"[conversa recente]\n{hist_txt}\n" if hist_txt else "")
         + transcript
     )

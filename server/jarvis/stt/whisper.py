@@ -6,6 +6,7 @@ elocução, quando a precisão importa; as parciais ficam com um modelo rápido.
 Medido neste projeto (RTX 5050, large-v3-turbo, float16):
   frase curta ~0,7s | WER 0.000 mesmo com ruído/eco (o Nemotron erra ~6%)
 """
+import asyncio
 import logging
 import threading
 import time
@@ -32,13 +33,24 @@ class WhisperStream(SttStream):
     def __init__(self, engine: "WhisperStt"):
         self.engine = engine
         self.buf: list[np.ndarray] = []
+        self._ultima_parcial = 0.0
 
     def prime(self, pcm: np.ndarray) -> None:
         self.buf.append(pcm)
 
     def feed(self, pcm: np.ndarray) -> str | None:
         self.buf.append(pcm)
-        return None            # sem parciais
+        if not self.engine.parciais:
+            return None
+        # o small transcreve em ~0,1s, então dá pra re-transcrever o trecho
+        # em andamento e ir dando parciais (é o que acende o reator cedo)
+        agora = time.monotonic()
+        amostras = sum(len(b) for b in self.buf)
+        if (agora - self._ultima_parcial >= self.engine.intervalo_parcial
+                and amostras > 4800):
+            self._ultima_parcial = agora
+            return self.engine.transcribe(self._audio())
+        return None
 
     def _audio(self) -> np.ndarray:
         pcm = np.concatenate(self.buf) if self.buf else np.zeros(0, dtype=np.int16)
@@ -56,6 +68,9 @@ class WhisperStt(SttEngine):
         self.compute_type = cfg.get("whisper_compute_type", "float16")
         self.lang = (cfg.get("language", "pt-BR") or "pt").split("-")[0]
         self.beam_size = int(cfg.get("whisper_beam_size", 1))
+        # com o modelo pequeno dá pra ele mesmo gerar as parciais
+        self.parciais = bool(cfg.get("whisper_parciais", False))
+        self.intervalo_parcial = float(cfg.get("whisper_intervalo_parcial", 0.45))
         # vocabulário da casa: nome do assistente, cômodos e comandos comuns
         self.hotwords = cfg.get("hotwords") or _hotwords_padrao()
         self.contexto = cfg.get("initial_prompt") or (
@@ -66,7 +81,6 @@ class WhisperStt(SttEngine):
         self._infer_lock = threading.Lock()
 
     async def load(self):
-        import asyncio
         await asyncio.get_running_loop().run_in_executor(None, self._load_sync)
 
     def _load_sync(self):

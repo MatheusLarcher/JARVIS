@@ -141,6 +141,35 @@ Armadilhas descobertas aqui (todas custaram tempo):
   no meio da medição — o teste desliga o WebSocket do app durante a checagem.
 - Benchmark de STT com a GPU ocupada faz o Whisper cair pra CPU (45 s/frase vs 0,7 s).
 
+## Bateria de testes de velocidade (2026-08-02) — ver [DESEMPENHO.md](DESEMPENHO.md)
+
+Números completos e como repetir estão em DESEMPENHO.md. O essencial:
+
+- **STT passou a ser UM modelo: whisper `small` com initial_prompt.** Ele gera as
+  próprias parciais (`whisper_parciais: true`). Motivos medidos: o `large-v3-turbo`
+  leva **14,7s/frase nesta GPU** (sem kernel otimizado; na CPU são 4,7s) e o
+  Nemotron reconhece o nome em só 2/8 áudios difíceis contra 8/8 do small+prompt.
+  Não vale manter 2 modelos: o small é tão rápido quanto o "rápido" (0,12 x 0,10s).
+- **`initial_prompt` é o que ensina o nome "Jarvis"** ao modelo; sem ele sai
+  "Já Luiz"/"Jairus". Custa ~0 no small (mas custa MUITO no turbo).
+- **`think=False` é obrigatório no Qwen3.x** — senão a resposta vem VAZIA
+  (ele gasta tudo pensando). `/no_think` no prompt NÃO resolve; tem que ser
+  parâmetro (o LiteLLM aceita `think=False` ou `extra_body`).
+- **A GPU dormindo custava 2s por pergunta**: cai pra 225 MHz (P8) quando ociosa.
+  `keep_alive` não resolve (o modelo continua carregado, é a placa). Solução:
+  `despertar_gpu()` disparado no wake, acordando LLM e voz em paralelo enquanto o
+  usuário ainda fala. Ganho medido: 2,4s -> 0,35s no primeiro token.
+- Prompt gordo custa caro em modelo pequeno: histórico foi limitado a 2 trocas
+  truncadas (`llm.historico_trocas` / `historico_max_chars`).
+
+Resultado final: comando da casa executa **0,14s depois que você para de falar**;
+reator acende em 0,48s (enquanto ainda fala). O que sobra pesado é a síntese de
+voz da resposta longa do LLM (~1,2x tempo real).
+
+Armadilha de medição: benchmark com a GPU disputada mente feio — o mesmo
+large-v3-turbo marcou 0,28s numa medição suja e 14,7s numa limpa. Sempre parar
+os serviços antes de medir modelo.
+
 ## LLM local + nome "Jarvis" na transcrição (2026-08-01)
 
 **LLM trocado para `ollama_chat/qwen3.5:0.8b`** (local, 1 GB) a pedido do Matheus.

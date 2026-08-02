@@ -60,6 +60,25 @@ def load_model():
     return _model
 
 
+@app.post("/aquecer")
+def aquecer():
+    """Gera um trechinho e descarta, só pra tirar a GPU do modo econômico.
+
+    Chamado quando o usuário chama o JARVIS: assim, quando a resposta chegar
+    aqui, a placa já está no clock cheio.
+    """
+    if _model is None or not REF_WAV.exists():
+        return {"ok": False}
+    t0 = time.monotonic()
+    try:
+        with _lock:
+            _model.generate("Sim.", language_id="pt",
+                            audio_prompt_path=str(REF_WAV), cfg_weight=0.5)
+        return {"ok": True, "segundos": round(time.monotonic() - t0, 2)}
+    except Exception:
+        return {"ok": False}
+
+
 @app.get("/health")
 def health():
     return {"ok": True, "loaded": _model is not None,
