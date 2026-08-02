@@ -53,10 +53,41 @@ nuvem:
   ativo: true                    # false = 100% local, nada sai da máquina
   modelo: openai/gpt-5.6-luna
   api_key_env: OPENAI_API_KEY    # a chave fica em config/.env
+  reasoning_effort: low          # o mínimo que este modelo aceita
 ```
 
-Com `ativo: false` o agente `avancado` desaparece da lista sozinho e o roteador
-nem sabe que ele existia.
+Com `ativo: false` — **ou sem a chave no ambiente** — o agente `avancado`
+desaparece da lista sozinho e o roteador nem sabe que ele existia. Oferecer o
+agente sem a chave faria toda pergunta difícil morrer em erro de autenticação e
+voltar como "não entendi".
+
+### Velocidade da nuvem
+
+A resposta é falada em voz alta: cada segundo "pensando" é silêncio pra quem
+está esperando. Medido A/B **intercalado** (a API oscila muito; medir tudo de A
+e depois tudo de B faz a oscilação virar "diferença" — isso me enganou na
+primeira medição, que sugeriu um ganho 3x maior do que o real):
+
+| | 1ª palavra |
+|---|---|
+| pelo agente, `low` | **0,93–1,08s** |
+| pelo agente, `high` | 1,24–1,78s |
+| chamada crua, `low` | 0,62–0,87s |
+
+`low` é o mínimo aceito — `minimal` e `none` são recusados por este modelo. Sem
+o parâmetro ele já se comporta perto do `low`, mas deixar explícito trava o
+comportamento rápido em vez de depender do padrão da API. O caminho do agente
+(ADK + prompt do JARVIS) custa outros ~0,2–0,3s.
+
+**A primeira chamada do dia era o problema de verdade**: DNS + TLS + cliente do
+litellm custavam **5,57s** contra 0,69s nas seguintes — e isso caía justo na
+pergunta difícil, quando a pessoa mais espera. O `aquecer()` do start agora abre
+a conexão com o provedor também (`nuvem pronta (aquecida)` no log). No servidor
+real, a primeira pergunta pra nuvem depois de reiniciar caiu pra **1,74s**.
+
+Detalhe que custou uma tentativa: aquecer com `max_tokens=1` **não funciona** com
+modelo de raciocínio — ele pensa antes de escrever e estoura o limite
+("Could not finish the message"), perdendo o aquecimento em silêncio.
 
 ## Por que o roteador quase não responde sozinho
 
@@ -162,6 +193,9 @@ palavra é do prompt ou um pedaço de uma) e o prompt inteiro está presente.
 | `tests/test_observador.py` | gatilhos + análise de verdade | chave da nuvem |
 | `tests/bench_roteador.py` | velocidade e acerto das duas camadas | Ollama |
 | `tests/test_agente_nuvem.py` | cada agente responde (inclusive a nuvem) | Ollama + chave |
+| `tests/bench_nuvem_onde_vai_o_tempo.py` | `low` vs `high`, e o custo do ADK | chave |
+| `tests/bench_nuvem_primeira_chamada.py` | quanto custa a 1ª chamada fria | chave |
+| `tests/bench_nuvem_no_servidor.py` | a 1ª pergunta difícil no servidor real | servidor no ar |
 | `tests/test_fim_da_fala.py` | toda resposta falada termina com `speak_end` | nada |
 | `tests/test_agentes_e2e.py` | voz real ponta a ponta + registro no disco | servidor no ar |
 | `tests/test_janela_destrava.py` | a janela do PC não fica presa depois de falar | app com `--remote-debugging-port=9333` |

@@ -30,7 +30,11 @@ def nuvem_disponivel() -> tuple[str | None, dict]:
     chave = os.environ.get(var) if var else None
     if var and not chave:
         return None, {}
-    return nuvem["modelo"], ({"api_key": chave} if chave else {})
+    extras = {"api_key": chave} if chave else {}
+    if nuvem.get("reasoning_effort"):
+        # menos "pensar" = a voz começa antes (ver o comentário no settings.yml)
+        extras["reasoning_effort"] = nuvem["reasoning_effort"]
+    return nuvem["modelo"], extras
 
 INSTRUCAO_BASE = (
     "Você é o JARVIS, assistente do Matheus, em português do Brasil. "

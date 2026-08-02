@@ -124,6 +124,16 @@ nuvem:
   ativo: true
   modelo: openai/gpt-5.6-luna
   api_key_env: OPENAI_API_KEY
+  # o "pensar antes de responder" vira SILENCIO pra quem esta esperando a voz.
+  # `low` e o minimo que este modelo aceita (`minimal`/`none` sao recusados).
+  # Medido A/B INTERCALADO, mediana de 9 medicoes ate a 1a palavra
+  # (tests/bench_nuvem_onde_vai_o_tempo.py):
+  #   pelo agente:  low 0,93s | high 1,24s
+  #   chamada crua: low 0,62s | high 0,95s
+  # ou seja: low economiza 0,31s, e o caminho do agente custa outros 0,31s.
+  # Sem o parametro o modelo ja se comporta perto do low, mas deixar explicito
+  # trava o comportamento rapido em vez de depender do padrao da API.
+  reasoning_effort: low
 
 # Registro: guarda audio + decisao de cada interacao (base pro aprendizado)
 registro:

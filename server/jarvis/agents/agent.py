@@ -198,8 +198,34 @@ async def aquecer():
         await acompletion(model=cfg["model"],
                           messages=[{"role": "user", "content": "oi"}], **extras)
         log.info("agente pronto (aquecido): %s", cfg["model"])
+        await _aquecer_nuvem()
     except Exception as e:
         log.warning("não deu pra aquecer o agente agora: %s", e)
+
+
+async def _aquecer_nuvem():
+    """Abre a conexão com o provedor externo antes de alguém precisar dela.
+
+    DNS + TLS + cliente do litellm custam caro na PRIMEIRA chamada: medido
+    5,57s contra 0,69s nas seguintes (tests/bench_nuvem_primeira_chamada.py).
+    Como a nuvem só atende pergunta difícil, isso caía justo na hora em que a
+    pessoa mais espera resposta.
+    """
+    from .especialistas import nuvem_disponivel
+
+    modelo, extras = nuvem_disponivel()
+    if not modelo:
+        return
+    try:
+        from litellm import acompletion
+        # max_tokens=1 NÃO serve aqui: o modelo raciocina antes de escrever e
+        # estoura o limite ("Could not finish the message"), aquecimento perdido
+        await acompletion(model=modelo,
+                          messages=[{"role": "user", "content": "diga oi"}],
+                          max_tokens=32, **extras)
+        log.info("nuvem pronta (aquecida): %s", modelo)
+    except Exception as e:
+        log.warning("não deu pra aquecer a nuvem: %s", e)
 
 
 _ultimo_despertar = 0.0

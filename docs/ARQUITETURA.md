@@ -47,7 +47,7 @@ A ordem é sempre da mais barata pra mais cara. Medido nesta máquina:
 | Intent Router (regex) | ~0 ms | luz, hora, temperatura, cumprimento, agradecimento |
 | Roteador (`qwen3.5:0.8b` local) | 0,31–0,53 s | escolhe o agente; responde papo social |
 | Agente local (ADK) | +0,3 s pro 1º token | casa, sistema, conversa |
-| Agente da nuvem (GPT-5.6 Luna) | ~2–3 s | `avancado`: pedidos difíceis |
+| Agente da nuvem (GPT-5.6 Luna, `reasoning_effort: low`) | ~1 s pro 1º token | `avancado`: pedidos difíceis |
 
 Em 14 frases de teste, 6 foram resolvidas sem LLM nenhum e o destino ficou
 certo em 14/14 (`tests/bench_roteador.py`).

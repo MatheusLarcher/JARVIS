@@ -287,6 +287,24 @@ Achados da revisão de código da mesma etapa (todos corrigidos e validados):
 Regra que ficou: **exemplos por agente são o que mais move a agulha** no roteador — com 2
 exemplos "que temperatura está aqui" ia pro `sistema`; com 3, foi pro `casa`.
 
+## Nuvem: `reasoning_effort: low` e o aquecimento da conexão (2026-08-02)
+
+`low` é o mínimo que o `gpt-5.6-luna` aceita (`minimal`/`none` são recusados). Ganho real,
+medido A/B **intercalado**: 1ª palavra em 0,93–1,08s contra 1,24–1,78s no `high`. O ADK
+repassa o parâmetro (provado mandando um valor inválido: a chamada morre).
+
+**A primeira medição estava errada** — não intercalada, sugeriu 2,7x de ganho quando o real
+é ~0,3s. A API oscila muito; medir tudo de A e depois tudo de B faz a oscilação virar
+"diferença". Vale pra qualquer benchmark contra API externa.
+
+**O gargalo de verdade era a primeira chamada**: 5,57s contra 0,69s nas seguintes (DNS +
+TLS + cliente do litellm), caindo justo na pergunta difícil. `aquecer()` agora abre a
+conexão com o provedor no start; no servidor real a 1ª pergunta pra nuvem depois de
+reiniciar caiu de 3,43s pra 1,74s.
+
+Armadilha: aquecer com `max_tokens=1` **não funciona** em modelo de raciocínio — ele pensa
+antes de escrever e estoura o limite ("Could not finish the message"). Usar ~32.
+
 ## Decisões e aprendizados importantes
 
 - **Wake word e VAD são STATEFUL → uma instância POR CONEXÃO** (`AudioPipeline.init()`).
