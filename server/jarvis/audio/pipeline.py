@@ -100,6 +100,8 @@ class AudioPipeline:
         self._wake_buf = np.zeros(0, dtype=np.int16)
         self._vad_buf = np.zeros(0, dtype=np.int16)
         self._stt_stream = None
+        self._parcial_task = None                       # transcrição em andamento
+        self._pcm_pendente = np.zeros(0, dtype=np.int16)  # áudio que chegou durante ela
         self._last_wake_t = 0.0
         self._speech_start = 0.0
         self._silence_start: float | None = None
@@ -109,6 +111,8 @@ class AudioPipeline:
         self._speech_frames = 0
         # ~240ms de fala contínua antes de acionar o STT
         self._min_speech_frames = max(1, int(cfg["vad"].get("min_speech_ms", 240) / 80))
+        self._parcial_task = None
+        self._pcm_pendente = np.zeros(0, dtype=np.int16)
 
         # diagnóstico: dá pra ver se o áudio do dispositivo está chegando e com
         # que intensidade — é a primeira coisa a checar quando "ele não me ouve"
@@ -200,6 +204,8 @@ class AudioPipeline:
         self._speech_seen = phase == Phase.SCANNING
         self._woke_in_this_utterance = False
         self._await_until = time.monotonic() + self._followup_s
+        self._parcial_task = None
+        self._pcm_pendente = np.zeros(0, dtype=np.int16)
         if self.wake_model:
             self.wake_model.reset()
 
@@ -215,7 +221,10 @@ class AudioPipeline:
         elif self._speech_seen and self._silence_start is None:
             self._silence_start = now
 
-        partial = await loop.run_in_executor(None, self._stt_stream.feed, pcm)
+        # A transcrição parcial NÃO pode bloquear: enquanto ela roda, os frames
+        # de áudio se acumulam e o pipeline fica para trás do tempo real (isso
+        # fazia o JARVIS "desistir de esperar o comando" no meio da fala).
+        partial = await self._parcial_sem_travar(pcm)
         if partial:
             if self.phase == Phase.SCANNING:
                 # acende o reator assim que o nome aparece, sem esperar a frase acabar
@@ -240,8 +249,36 @@ class AudioPipeline:
         if silence or too_long:
             await self._end_utterance()
         elif gave_up:
+            log.info("[%s] desisti de esperar o comando (%.1fs sem fala)",
+                     self.device_id, self._followup_s)
             self._reset_idle()
             await self.on_timeout()
+
+    async def _parcial_sem_travar(self, pcm: np.ndarray) -> str | None:
+        """Entrega o áudio ao STT e devolve parcial só se já estiver pronta.
+
+        O áudio é sempre acumulado na hora (barato). A transcrição roda numa
+        tarefa à parte; se ainda estiver rodando, o frame seguinte não espera.
+        """
+        stream = self._stt_stream
+        if stream is None:
+            return None
+        loop = asyncio.get_running_loop()
+
+        if self._parcial_task is None or self._parcial_task.done():
+            pronta = None
+            if self._parcial_task is not None:
+                try:
+                    pronta = self._parcial_task.result()
+                except Exception:
+                    pronta = None
+            pendente, self._pcm_pendente = self._pcm_pendente, np.zeros(0, dtype=np.int16)
+            junto = np.concatenate([pendente, pcm]) if len(pendente) else pcm
+            self._parcial_task = loop.run_in_executor(None, stream.feed, junto)
+            return pronta
+        # transcrição anterior ainda rodando: guarda o áudio e segue a vida
+        self._pcm_pendente = np.concatenate([self._pcm_pendente, pcm])
+        return None
 
     async def _end_utterance(self):
         loop = asyncio.get_running_loop()
@@ -249,6 +286,16 @@ class AudioPipeline:
         phase = self.phase
         self.phase = Phase.BUSY
         self._stt_stream = None
+        # o que sobrou enquanto a última parcial rodava não pode se perder
+        if self._parcial_task is not None:
+            try:
+                await self._parcial_task
+            except Exception:
+                pass
+            self._parcial_task = None
+        if len(self._pcm_pendente):
+            await loop.run_in_executor(None, stream.prime, self._pcm_pendente)
+            self._pcm_pendente = np.zeros(0, dtype=np.int16)
 
         text = (await loop.run_in_executor(None, stream.finish) or "").strip()
         log.info("[%s] fala: %r (fase=%s)", self.device_id, text, phase.value)
@@ -279,6 +326,8 @@ class AudioPipeline:
         else:
             await self.on_ack()                   # só chamou: responde e espera
             self._begin_utterance(Phase.COMMAND, preroll=False)
+            log.info("[%s] chamou sem comando; ouvindo o que vem agora",
+                     self.device_id)
 
     # ------------------------------------------------------------------ estado
     def _reset_idle(self):

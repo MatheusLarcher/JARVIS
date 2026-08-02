@@ -88,8 +88,12 @@ llm:
   # (medido: 0,4s -> 2,4s). Cada troca antiga entra truncada.
   historico_trocas: 2
   historico_max_chars: 160
-  # resposta curta = menos tempo de sintese de voz
-  max_tokens: 110
+  # resposta curta = menos tempo de sintese de voz (1 frase cabe em ~60 tokens)
+  max_tokens: 60
+  # corte garantido no servidor: modelo pequeno nao obedece "responda em uma
+  # frase" e ainda comenta as proprias instrucoes
+  max_frases: 1
+  max_palavras: 25
   # opcao de nuvem (mais inteligente, ~1s de latencia):
   # model: deepseek/deepseek-chat
 

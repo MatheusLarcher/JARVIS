@@ -73,10 +73,11 @@ class WhisperStt(SttEngine):
         self.intervalo_parcial = float(cfg.get("whisper_intervalo_parcial", 0.45))
         # vocabulário da casa: nome do assistente, cômodos e comandos comuns
         self.hotwords = cfg.get("hotwords") or _hotwords_padrao()
-        self.contexto = cfg.get("initial_prompt") or (
-            "Conversa com o assistente de voz Jarvis. "
-            "Exemplos: Jarvis, liga a luz da sala. Jarvis, desliga a luz do quarto. "
-            "Jarvis, que horas são? Jarvis, abre o navegador.")
+        # SEM frases de exemplo: o Whisper alucina o conteúdo do prompt quando o
+        # áudio é curto ou baixo (chegou a transcrever "Jarvis, abre o navegador"
+        # com o usuário dizendo "liga a luz da sala"). Só o nome já basta pra ele
+        # parar de escrever "Já Luiz"/"Jairus".
+        self.contexto = cfg.get("initial_prompt") or "Falando com o Jarvis."
         self.model = None
         self._infer_lock = threading.Lock()
 

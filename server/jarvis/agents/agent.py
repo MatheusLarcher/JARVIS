@@ -51,6 +51,45 @@ def _extras_llm(cfg: dict) -> dict:
     return extras
 
 
+class _CortaResposta:
+    """Corta a resposta na primeira frase.
+
+    Modelo pequeno não obedece "responda em uma frase": ele se estende, comenta
+    as próprias instruções ("sem adições desnecessárias como Claro") e cada
+    palavra a mais vira segundos de fala. Aqui o corte é garantido, no servidor.
+
+    Funciona no stream: assim que a primeira frase fecha, para de emitir.
+    """
+
+    FIM = ".!?…"
+
+    def __init__(self, max_frases: int = 1, max_palavras: int = 25):
+        self.max_frases = max_frases
+        self.max_palavras = max_palavras
+        self.frases = 0
+        self.palavras = 0
+        self.encerrado = False
+
+    def feed(self, texto: str) -> str:
+        if self.encerrado or not texto:
+            return ""
+        saida = []
+        for ch in texto:
+            saida.append(ch)
+            if ch.isspace():
+                self.palavras += 1
+                if self.palavras >= self.max_palavras:
+                    # estourou o tamanho: fecha a frase aqui mesmo
+                    self.encerrado = True
+                    return "".join(saida).rstrip() + "."
+            if ch in self.FIM:
+                self.frases += 1
+                if self.frases >= self.max_frases:
+                    self.encerrado = True
+                    return "".join(saida)
+        return "".join(saida)
+
+
 class _FiltroPensamento:
     """Tira o raciocínio (<think>...</think>) do texto que vai virar fala.
 
@@ -97,11 +136,13 @@ class _FiltroPensamento:
 
 def _instrucao(llm_cfg: dict) -> str:
     texto = (
-        "Você é o JARVIS, assistente pessoal residencial do Matheus, em português do Brasil. "
-        "Suas respostas são FALADAS em voz alta e cada palavra custa tempo de síntese: "
-        "responda em no máximo 2 frases curtas (idealmente até 30 palavras), direto ao ponto, "
-        "sem rodeios, sem repetir a pergunta, sem markdown, sem listas e sem emojis. "
-        "Não comece com saudações nem com 'Claro'. Vá direto à resposta. "
+        "Você é o JARVIS, assistente pessoal do Matheus, em português do Brasil. "
+        "REGRA MAIS IMPORTANTE: responda em UMA única frase curta, de no máximo "
+        "20 palavras. Nunca escreva mais de uma frase. "
+        "Sua resposta é falada em voz alta, então: sem markdown, sem listas, "
+        "sem emojis, sem repetir a pergunta, sem saudação, sem 'Claro' e sem "
+        "explicar o que você vai fazer. Diga só a resposta, direto. "
+        "Se não souber, diga apenas que não sabe, em poucas palavras. "
         "Use as ferramentas quando o pedido envolver a casa."
     )
     # nos modelos Qwen3.x isto desliga o "pensar antes de responder"
@@ -222,6 +263,9 @@ async def ask_stream(transcript: str, ctx: DeviceContext):
     content = types.Content(role="user", parts=[types.Part(text=prompt)])
     enviado = ""
     filtro = _FiltroPensamento()
+    cfg_llm = config.settings["llm"]
+    corte = _CortaResposta(int(cfg_llm.get("max_frases", 1)),
+                           int(cfg_llm.get("max_palavras", 25)))
     try:
         async for event in _runner.run_async(
                 user_id=ctx.user_id, session_id=session.id, new_message=content,
@@ -237,9 +281,11 @@ async def ask_stream(transcript: str, ctx: DeviceContext):
                 novo = texto[len(enviado):] if texto.startswith(enviado) else texto
                 if novo:
                     enviado += novo
-                    limpo = filtro.feed(novo)
+                    limpo = corte.feed(filtro.feed(novo))
                     if limpo:
                         yield limpo
+                    if corte.encerrado:
+                        return          # já disse o que tinha que dizer
             elif event.is_final_response():
                 # o final repete tudo: só emite o que faltou (comparação exata,
                 # sem strip, pra não comer espaços e colar palavras)
