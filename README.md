@@ -55,6 +55,10 @@ edite `config\settings.yml` (`home_assistant: mode: real` + url) e coloque o tok
 
 ## Documentação técnica
 
-Está em [`docs/`](docs/): arquitetura, APIs, como adicionar skills, dispositivos,
+Um desenho de como tudo se encaixa, com os tempos medidos:
+
+![Como o JARVIS funciona](docs/diagrama.png)
+
+O resto está em [`docs/`](docs/): arquitetura, APIs, como adicionar skills, dispositivos,
 trocar STT/TTS/LLM e a memória do projeto. Os agentes, o registro das interações e o
 observador estão em [docs/AGENTES.md](docs/AGENTES.md).

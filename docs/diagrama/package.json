@@ -1,0 +1,5 @@
+{
+  "name": "jarvis-diagrama",
+  "private": true,
+  "main": "gerar.js"
+}

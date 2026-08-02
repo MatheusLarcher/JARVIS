@@ -1,0 +1,251 @@
+<!doctype html>
+<!-- Fonte do diagrama de docs/diagrama.png.
+     Pra regerar depois de mexer aqui: python docs/diagrama/gerar.py -->
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 1680px; height: 812px;
+    background: radial-gradient(120% 90% at 50% 0%, #0a1a24 0%, #04080c 60%, #02050a 100%);
+    color: #d6f2fb;
+    font: 15px/1.35 "Segoe UI", system-ui, sans-serif;
+    padding: 34px 40px 26px;
+    position: relative;
+  }
+  .titulo { font-size: 30px; font-weight: 300; letter-spacing: 7px; color: #7ee8ff; }
+  .titulo b { font-weight: 700; color: #fff; letter-spacing: 8px; }
+  .sub { font-size: 14px; color: #5e8497; margin-top: 5px; letter-spacing: .4px; }
+  .cabecalho { display: flex; justify-content: space-between; align-items: flex-end; }
+  .agora { text-align: right; font-size: 13px; color: #5e8497; line-height: 1.7; }
+  .agora b { color: #9fe9ff; font-weight: 600; }
+
+  /* ---------------------------------------------------------------- blocos */
+  .faixa { display: flex; gap: 14px; align-items: stretch; }
+  .cx {
+    border: 1px solid #16394b; border-radius: 11px;
+    background: linear-gradient(180deg, rgba(14,40,55,.62), rgba(6,18,26,.62));
+    padding: 12px 14px;
+  }
+  .cx h4 {
+    font-size: 11px; font-weight: 700; letter-spacing: 2.2px;
+    color: #4fc9e8; text-transform: uppercase; margin-bottom: 9px;
+  }
+  .lin { display: flex; align-items: baseline; gap: 8px; margin: 4px 0; }
+  .lin .q { color: #eaf9ff; font-size: 14.5px; }
+  .lin .d { color: #6d94a6; font-size: 12.5px; }
+  .t {
+    margin-left: auto; font-size: 12.5px; font-weight: 700;
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  .verde { color: #37e0a0; } .amarelo { color: #ffd25e; } .azul { color: #6cc0ff; }
+  .cinza { color: #567a8b; }
+
+  /* --------------------------------------------------------------- topo */
+  .aparelhos { display: flex; gap: 10px; margin-top: 20px; }
+  .ap {
+    flex: 1; text-align: center; padding: 11px 6px 10px;
+    border: 1px solid #16394b; border-radius: 10px;
+    background: linear-gradient(180deg, rgba(16,46,62,.55), rgba(6,18,26,.5));
+  }
+  .ap .ic { font-size: 21px; line-height: 1; }
+  .ap .n { font-size: 13.5px; color: #eaf9ff; margin-top: 5px; font-weight: 600; }
+  .ap .o { font-size: 11.5px; color: #5e8497; margin-top: 2px; }
+  .ap.off { opacity: .42; }
+
+  .seta-larga {
+    text-align: center; color: #2f7f9c; font-size: 12.5px;
+    letter-spacing: 1.6px; margin: 9px 0 5px;
+  }
+  .seta-larga b { color: #7ee8ff; font-weight: 600; letter-spacing: .6px; }
+
+  /* ------------------------------------------------------------ servidor */
+  .servidor {
+    border: 1.5px solid #1e5a75; border-radius: 15px;
+    background: linear-gradient(180deg, rgba(9,29,41,.72), rgba(4,12,18,.72));
+    padding: 15px 17px 16px; position: relative;
+  }
+  .servidor > .marca {
+    position: absolute; top: -10px; left: 22px; background: #061219;
+    padding: 0 11px; font-size: 11.5px; letter-spacing: 2.6px;
+    color: #7ee8ff; font-weight: 700;
+  }
+  .colunas { display: flex; gap: 13px; align-items: stretch; }
+  .col { flex: 1; display: flex; flex-direction: column; gap: 9px; }
+  .col.decidir { flex: 1.62; }
+
+  .passo { display: flex; align-items: center; gap: 10px; }
+  .num {
+    width: 21px; height: 21px; flex: 0 0 21px; border-radius: 50%;
+    display: grid; place-items: center;
+    font-size: 11.5px; font-weight: 800; color: #04121a;
+  }
+  .n1 { background: #37e0a0; } .n2 { background: #ffd25e; } .n3 { background: #6cc0ff; }
+
+  .camada { border-left: 3px solid; padding: 9px 12px; border-radius: 0 9px 9px 0; }
+  .camada.c1 { border-color: #37e0a0; background: rgba(55,224,160,.075); }
+  .camada.c2 { border-color: #ffd25e; background: rgba(255,210,94,.075); }
+  .camada.c3 { border-color: #6cc0ff; background: rgba(108,192,255,.075); }
+  .camada .cab { display: flex; align-items: baseline; gap: 9px; }
+  .camada .cab .nome { font-size: 15px; font-weight: 700; color: #fff; }
+  .camada .cab .tec { font-size: 11.5px; color: #6d94a6; }
+  .camada .exemplos { font-size: 12.5px; color: #86adbf; margin-top: 4px; }
+  .camada .exemplos i { color: #cfe9f4; font-style: normal; }
+
+  .agentes { display: flex; gap: 7px; margin-top: 8px; }
+  .ag {
+    flex: 1; border: 1px solid #245066; border-radius: 8px;
+    padding: 7px 8px; background: rgba(10,32,45,.6);
+  }
+  .ag .nm { font-size: 13.5px; font-weight: 700; color: #eaf9ff; }
+  .ag .ds { font-size: 11px; color: #6d94a6; margin-top: 2px; line-height: 1.25; }
+  .ag .md { font-size: 10.5px; margin-top: 4px; font-weight: 700; }
+  .ag.nuvem { border-color: #3a7fb5; background: rgba(14,40,66,.6); }
+
+  .seta-h { color: #2f7f9c; font-size: 19px; display: grid; place-items: center; }
+
+  /* ------------------------------------------------------------- rodapé */
+  .rodape { display: flex; gap: 13px; margin-top: 13px; align-items: stretch; }
+  .fundo {
+    flex: 1.42; border: 1px dashed #2a5468; border-radius: 11px;
+    padding: 11px 14px; background: rgba(6,20,28,.45);
+  }
+  .fundo h4 { color: #6d94a6; }
+  .externo { flex: 1; }
+  .legenda { flex: .92; }
+  .lg { display: flex; align-items: center; gap: 8px; margin: 5px 0; font-size: 12.5px; }
+  .bola { width: 11px; height: 11px; border-radius: 50%; flex: 0 0 11px; }
+
+  .medido {
+    position: absolute; right: 40px; bottom: 22px;
+    font-size: 11px; color: #3f6274; letter-spacing: .3px; text-align: right;
+  }
+</style>
+</head>
+<body>
+
+<div class="cabecalho">
+  <div>
+    <div class="titulo">J A R <b>V I S</b></div>
+    <div class="sub">Como o sistema funciona hoje — do "Jarvis" falado até a resposta em voz</div>
+  </div>
+  <div class="agora">
+    tudo roda no <b>notebook</b>, 24h &nbsp;·&nbsp; servidor na porta <b>8040</b><br>
+    o que sai da máquina: <b>só</b> as perguntas difíceis (e dá pra desligar)
+  </div>
+</div>
+
+<!-- ------------------------------------------------------------- aparelhos -->
+<div class="aparelhos">
+  <div class="ap"><div class="ic">🖥️</div><div class="n">PC (bandeja)</div><div class="o">reator aparece no wake</div></div>
+  <div class="ap"><div class="ic">🌐</div><div class="n">Navegador</div><div class="o">mesma interface</div></div>
+  <div class="ap off"><div class="ic">📱</div><div class="n">Celular</div><div class="o">APK pronto, falta instalar</div></div>
+  <div class="ap off"><div class="ic">📺</div><div class="n">Tablet</div><div class="o">modo quadro na parede</div></div>
+  <div class="ap off"><div class="ic">⌚</div><div class="n">Relógio</div><div class="o">toca pra falar</div></div>
+</div>
+
+<div class="seta-larga">▼ &nbsp; <b>WebSocket</b> &nbsp;·&nbsp; áudio cru, 16 kHz, pedaços de 80 ms &nbsp;·&nbsp; token por aparelho &nbsp; ▼</div>
+
+<!-- -------------------------------------------------------------- servidor -->
+<div class="servidor">
+  <div class="marca">SERVIDOR — SEU NOTEBOOK</div>
+  <div class="colunas">
+
+    <!-- ouvir -->
+    <div class="col">
+      <div class="passo"><span class="num n1">1</span><b style="font-size:14px">OUVIR</b></div>
+      <div class="cx" style="flex:1">
+        <h4>quem está falando comigo?</h4>
+        <div class="lin"><span class="q">Detector de voz</span><span class="t cinza">Silero</span></div>
+        <div class="lin"><span class="d">ignora silêncio e ruído solto</span></div>
+        <div class="lin" style="margin-top:8px"><span class="q">Transcrição</span><span class="t cinza">Whisper small · GPU</span></div>
+        <div class="lin"><span class="d">0,12 s por frase · escuta 1 s <b style="color:#9fe9ff">antes</b> de você começar,<br>então o começo da frase nunca falta</span></div>
+        <div class="lin" style="margin-top:8px"><span class="q">Achou "Jarvis"?</span><span class="t verde">0,5–0,6 s</span></div>
+        <div class="lin"><span class="d">o reator acende <b style="color:#9fe9ff">enquanto</b> você ainda fala.<br>Aceita "jarves", "javis"… e o comando<br>pode vir na mesma frase.</span></div>
+      </div>
+    </div>
+
+    <div class="seta-h">➜</div>
+
+    <!-- decidir -->
+    <div class="col decidir">
+      <div class="passo"><span class="num n2">2</span><b style="font-size:14px">DECIDIR</b>
+        <span style="font-size:12px;color:#6d94a6">— tenta sempre o caminho mais barato primeiro</span></div>
+
+      <div class="camada c1">
+        <div class="cab"><span class="nome">Regras locais</span><span class="tec">texto → regra</span>
+          <span class="t verde">0 ms · sem IA</span></div>
+        <div class="exemplos"><i>"liga a luz da sala"</i> · <i>"que horas são"</i> · <i>"bom dia"</i> · <i>"obrigado"</i></div>
+      </div>
+
+      <div class="camada c2">
+        <div class="cab"><span class="nome">Roteador</span><span class="tec">Qwen3.5 0.8B · na sua GPU</span>
+          <span class="t amarelo">0,3–0,5 s</span></div>
+        <div class="exemplos">não é regra conhecida → ele só escolhe <i>quem</i> atende.<br>
+          Não pode responder sozinho: modelo pequeno inventa.</div>
+      </div>
+
+      <div class="camada c3">
+        <div class="cab"><span class="nome">Agente especialista</span><span class="tec">cada um com seu prompt e suas ferramentas</span></div>
+        <div class="agentes">
+          <div class="ag"><div class="nm">casa</div><div class="ds">luzes, temperatura,<br>dispositivos</div><div class="md amarelo">local + ferramentas</div></div>
+          <div class="ag"><div class="nm">sistema</div><div class="ds">o PC e o próprio<br>assistente</div><div class="md amarelo">local</div></div>
+          <div class="ag"><div class="nm">conversa</div><div class="ds">perguntas gerais,<br>papo</div><div class="md amarelo">local</div></div>
+          <div class="ag nuvem"><div class="nm">avançado ↗</div><div class="ds">o que é difícil<br>ou tem vários passos</div><div class="md azul">GPT-5.6 Luna · 1,0 s</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="seta-h">➜</div>
+
+    <!-- falar -->
+    <div class="col">
+      <div class="passo"><span class="num n3">3</span><b style="font-size:14px">FALAR</b></div>
+      <div class="cx" style="flex:1">
+        <h4>com a sua voz clonada</h4>
+        <div class="lin"><span class="q">Frase pronta</span><span class="t verde">0 ms</span></div>
+        <div class="lin"><span class="d">"Pronto." · "Bom dia." · "Um momento."<br>já gravadas, com variação</span></div>
+        <div class="lin" style="margin-top:9px"><span class="q">Frase inédita</span><span class="t cinza">Chatterbox · 8041</span></div>
+        <div class="lin"><span class="d">começa a falar na <b style="color:#9fe9ff">3ª palavra</b> que o<br>modelo escreve — não espera o<br>texto terminar</span></div>
+        <div class="lin" style="margin-top:9px"><span class="q">Volta pro mesmo aparelho</span></div>
+        <div class="lin"><span class="d">que puxou a conversa</span></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ---------------------------------------------------------------- rodapé -->
+<div class="rodape">
+
+  <div class="fundo">
+    <h4>depois de responder — em segundo plano, sem atrasar nada</h4>
+    <div class="lin"><span class="q">Registro</span><span class="d">guarda o áudio + a decisão de cada pedido</span><span class="t cinza">30 dias</span></div>
+    <div class="lin"><span class="d">é onde dá pra ouvir onde ele errou <b style="color:#9fe9ff">com a sua voz</b> — e o material pra treinar depois</span></div>
+    <div class="lin" style="margin-top:7px"><span class="q">Observador</span><span class="d">o modelo esperto relê o que deu errado</span><span class="t azul">só às vezes</span></div>
+    <div class="lin"><span class="d">entra quando: a rota saiu <b style="color:#9fe9ff">incerta</b> · você <b style="color:#9fe9ff">repetiu</b> o pedido · a tarefa <b style="color:#9fe9ff">falhou</b></span></div>
+  </div>
+
+  <div class="cx externo">
+    <h4>o que roda ao lado</h4>
+    <div class="lin"><span class="q">Ollama</span><span class="t cinza">:11434 · local</span></div>
+    <div class="lin"><span class="q">Voz clonada</span><span class="t cinza">:8041 · sua GPU</span></div>
+    <div class="lin"><span class="q">Casa</span><span class="t cinza">Home Assistant · simulado</span></div>
+    <div class="lin"><span class="q">OpenAI ↗</span><span class="t azul">única coisa fora</span></div>
+  </div>
+
+  <div class="cx legenda">
+    <h4>quanto custa cada cor</h4>
+    <div class="lg"><span class="bola" style="background:#37e0a0"></span>instantâneo, sem IA nenhuma</div>
+    <div class="lg"><span class="bola" style="background:#ffd25e"></span>IA na sua GPU, nada sai daqui</div>
+    <div class="lg"><span class="bola" style="background:#6cc0ff"></span>IA na nuvem — só se você deixar</div>
+    <div class="lg" style="color:#6d94a6;margin-top:8px">6 dos 14 pedidos de teste<br>nem chegam na IA</div>
+  </div>
+
+</div>
+
+<div class="medido">tempos medidos nesta máquina (RTX 5050) · agosto/2026</div>
+
+</body>
+</html>

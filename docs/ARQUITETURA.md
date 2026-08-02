@@ -1,5 +1,10 @@
 # JARVIS — Arquitetura
 
+![Como o JARVIS funciona hoje](diagrama.png)
+
+> O desenho acima é gerado: a fonte é [`diagrama/diagrama.html`](diagrama/diagrama.html).
+> Mexeu nele? Rode `python docs/diagrama/gerar.py` pra atualizar o PNG.
+
 ## Visão geral
 
 O notebook Windows é o **servidor central** (roda 24h). Todos os dispositivos (tablet, celular,
