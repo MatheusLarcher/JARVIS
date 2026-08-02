@@ -23,6 +23,10 @@ async def lifespan(app: FastAPI):
     await store.open()
     await ha.start()
     await Shared.load()
+    # deixa o agente pronto antes da primeira pergunta (economiza ~4,5s nela)
+    from .agents.agent import aquecer as aquecer_agente
+    asyncio.create_task(aquecer_agente())
+
     warm_task = None
     if config.settings["tts"].get("cache_warmer"):
         from .tts.warmer import run as warm_run

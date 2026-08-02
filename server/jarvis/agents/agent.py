@@ -33,6 +33,65 @@ async def _tool_temperatura() -> dict:
     return {"temperatura_c": await ha.temperature()}
 
 
+class _FiltroPensamento:
+    """Tira o raciocínio (<think>...</think>) do texto que vai virar fala.
+
+    Os Qwen3.x às vezes "pensam em voz alta" mesmo com /no_think, e isso não
+    pode ser falado. Funciona no stream, sem esperar a resposta fechar.
+    """
+
+    ABRE, FECHA = "<think>", "</think>"
+
+    def __init__(self):
+        self.pensando = False
+        self.pendente = ""      # pedaço de tag que pode ter vindo partido
+
+    @staticmethod
+    def _inicio_de_tag(buffer: str, tag: str) -> int:
+        """Quantos caracteres do fim do buffer podem ser o começo da tag."""
+        for n in range(min(len(tag) - 1, len(buffer)), 0, -1):
+            if tag.startswith(buffer[-n:]):
+                return n
+        return 0
+
+    def feed(self, texto: str) -> str:
+        buffer = self.pendente + texto
+        self.pendente = ""
+        saida = []
+        while buffer:
+            alvo = self.FECHA if self.pensando else self.ABRE
+            pos = buffer.find(alvo)
+            if pos == -1:
+                # a tag pode estar chegando partida: segura só esse pedacinho
+                n = self._inicio_de_tag(buffer, alvo)
+                if n:
+                    self.pendente = buffer[-n:]
+                    buffer = buffer[:-n]
+                if not self.pensando:
+                    saida.append(buffer)
+                return "".join(saida)
+            if not self.pensando:
+                saida.append(buffer[:pos])
+            buffer = buffer[pos + len(alvo):]
+            self.pensando = not self.pensando
+        return "".join(saida)
+
+
+def _instrucao(llm_cfg: dict) -> str:
+    texto = (
+        "Você é o JARVIS, assistente pessoal residencial do Matheus, em português do Brasil. "
+        "Suas respostas são FALADAS em voz alta e cada palavra custa tempo de síntese: "
+        "responda em no máximo 2 frases curtas (idealmente até 30 palavras), direto ao ponto, "
+        "sem rodeios, sem repetir a pergunta, sem markdown, sem listas e sem emojis. "
+        "Não comece com saudações nem com 'Claro'. Vá direto à resposta. "
+        "Use as ferramentas quando o pedido envolver a casa."
+    )
+    # nos modelos Qwen3.x isto desliga o "pensar antes de responder"
+    if llm_cfg.get("no_think"):
+        texto += " /no_think"
+    return texto
+
+
 def _build():
     global _runner, _session_service
     from google.adk.agents import Agent
@@ -41,22 +100,39 @@ def _build():
     from google.adk.sessions import InMemorySessionService
 
     llm_cfg = config.settings["llm"]
+    # api_base é o que aponta pro Ollama local; sem ele o LiteLLM tenta a nuvem
+    extras = {"api_base": llm_cfg["api_base"]} if llm_cfg.get("api_base") else {}
     agent = Agent(
         name="jarvis",
-        model=LiteLlm(model=llm_cfg["model"]),
+        model=LiteLlm(model=llm_cfg["model"], **extras),
         description="JARVIS, assistente pessoal do Matheus.",
-        instruction=(
-            "Você é o JARVIS, assistente pessoal residencial do Matheus, em português do Brasil. "
-            "Suas respostas são FALADAS em voz alta e cada palavra custa tempo de síntese: "
-            "responda em no máximo 2 frases curtas (idealmente até 30 palavras), direto ao ponto, "
-            "sem rodeios, sem repetir a pergunta, sem markdown, sem listas e sem emojis. "
-            "Não comece com saudações nem com 'Claro'. Vá direto à resposta. "
-            "Use as ferramentas quando o pedido envolver a casa."
-        ),
+        instruction=_instrucao(llm_cfg),
         tools=[_tool_controlar_luz, _tool_temperatura, *load_toolsets()],
     )
     _session_service = InMemorySessionService()
     _runner = Runner(agent=agent, app_name=APP, session_service=_session_service)
+
+
+async def aquecer():
+    """Monta o agente e abre a conexão com o provedor no start do servidor.
+
+    Sem isto, a PRIMEIRA pergunta paga tudo isso e demora ~5,5s em vez de ~0,8s
+    (medido em tests/diag_llm_stream.py).
+    """
+    try:
+        if _runner is None:
+            _build()
+        from litellm import acompletion
+        cfg = config.settings["llm"]
+        extras = {"api_base": cfg["api_base"]} if cfg.get("api_base") else {}
+        # com modelo local, esta chamada também tira o modelo do disco e o
+        # deixa carregado — a primeira pergunta de verdade já sai rápida
+        await acompletion(model=cfg["model"],
+                          messages=[{"role": "user", "content": "oi"}],
+                          max_tokens=1, **extras)
+        log.info("agente pronto (aquecido): %s", cfg["model"])
+    except Exception as e:
+        log.warning("não deu pra aquecer o agente agora: %s", e)
 
 
 async def _montar_prompt(transcript: str, ctx: DeviceContext) -> str:
@@ -87,6 +163,7 @@ async def ask_stream(transcript: str, ctx: DeviceContext):
     session = await _session_service.create_session(app_name=APP, user_id=ctx.user_id)
     content = types.Content(role="user", parts=[types.Part(text=prompt)])
     enviado = ""
+    filtro = _FiltroPensamento()
     try:
         async for event in _runner.run_async(
                 user_id=ctx.user_id, session_id=session.id, new_message=content,
@@ -102,7 +179,9 @@ async def ask_stream(transcript: str, ctx: DeviceContext):
                 novo = texto[len(enviado):] if texto.startswith(enviado) else texto
                 if novo:
                     enviado += novo
-                    yield novo
+                    limpo = filtro.feed(novo)
+                    if limpo:
+                        yield limpo
             elif event.is_final_response():
                 # o final repete tudo: só emite o que faltou (comparação exata,
                 # sem strip, pra não comer espaços e colar palavras)

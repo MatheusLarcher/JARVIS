@@ -28,6 +28,18 @@ CASES = [
     ("Jar vis, liga a luz", True, "liga a luz"),
     ("Jarbis, que horas são", True, "que horas sao"),
 
+    # o que o STT REALMENTE escreveu quando o Matheus chamou (do jarvis.log).
+    # Nome mal transcrito só vale quando vem com um comando conhecido — senão
+    # a TV ligada acordaria o JARVIS toda hora.
+    ("Já, Luiz. Acende a luz da sala.", True, "acende a luz da sala"),
+    ("Já vi, apaga a luz do quarto", True, "apaga a luz do quarto"),
+    ("Jairus, que horas são?", True, "que horas sao"),
+    # "ja ravid" colado fica a 2 edições de "jarvis": é chamada, mesmo sozinha
+    ("Já, Ravid?", True, ""),
+    # sem comando reconhecível, não dispara (proteção contra falso positivo)
+    ("Jairus", False, ""),
+    ("Já vi, eu vou gravar o salão.", False, ""),
+
     # não deve disparar
     ("liga a luz da sala", False, ""),
     ("hoje o dia foi bom", False, ""),

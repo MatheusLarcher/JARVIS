@@ -58,14 +58,26 @@ class WakeMatcher:
         # palavras que costumam vir grudadas antes do nome
         self.prefixes = {"hey", "ei", "ok", "ola", "oi", "e", "o"}
 
+    def _distancia(self, word: str) -> int:
+        return min(_edits(word, self.keyword), _edits(phonetic(word), self.key_ph))
+
     def _is_keyword(self, word: str) -> bool:
         if len(word) < 4:            # curto demais casaria com qualquer coisa
             return False
         # palavra curta tem menos evidência: exige estar mais perto
         allowed = self.max_edits if len(word) >= 5 else 1
-        if _edits(word, self.keyword) <= allowed:
-            return True
-        return _edits(phonetic(word), self.key_ph) <= allowed
+        return self._distancia(word) <= allowed
+
+    def _parece_keyword(self, word: str) -> bool:
+        """Parecido, mas não o bastante pra disparar sozinho.
+
+        O STT escreve coisas como "Jairus", "Já Luiz", "Já vi". Aceitar isso
+        direto encheria de falso positivo (a TV ligada acorda o JARVIS), então
+        só vale quando vem seguido de um comando que a gente conhece.
+        """
+        if len(word) < 4:
+            return False
+        return self._distancia(word) <= self.max_edits + 1
 
     def match(self, transcript: str) -> tuple[bool, str]:
         """(chamou?, comando restante da mesma frase)."""
@@ -89,7 +101,25 @@ class WakeMatcher:
             if self._is_keyword(words[i] + words[i + 1]):
                 rest = strip_prefix(words[:i], i) + words[i + 2:]
                 return True, " ".join(rest).strip()
+
+        # último recurso: nome mal transcrito ("Jairus", "Já Luiz") só conta se
+        # o que vem depois for um comando que a gente reconhece
+        for i, w in enumerate(words):
+            if self._parece_keyword(w):
+                rest = " ".join(strip_prefix(words[:i], i) + words[i + 1:]).strip()
+                if rest and self._eh_comando(rest):
+                    return True, rest
+        for i in range(len(words) - 1):
+            if self._parece_keyword(words[i] + words[i + 1]):
+                rest = " ".join(strip_prefix(words[:i], i) + words[i + 2:]).strip()
+                if rest and self._eh_comando(rest):
+                    return True, rest
         return False, ""
+
+    def _eh_comando(self, texto: str) -> bool:
+        """O resto da frase é um comando conhecido? (evita falso positivo)"""
+        from ..intents.router import intent_router
+        return intent_router.match(texto) is not None
 
 
 matcher = WakeMatcher()

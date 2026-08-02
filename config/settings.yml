@@ -71,9 +71,16 @@ tts:
   stream_max_palavras: 14
 
 llm:
-  # LiteLLM model string - trocavel sem tocar codigo
-  model: deepseek/deepseek-chat
-  api_key_env: DEEPSEEK_API_KEY
+  # LiteLLM model string - trocavel sem tocar codigo.
+  # ollama_chat/<tag> roda local (nada sai da maquina); precisa do Ollama no ar.
+  model: ollama_chat/qwen3.5:0.8b
+  api_base: http://127.0.0.1:11434
+  api_key_env: DEEPSEEK_API_KEY      # usado se voltar pra um provedor de nuvem
+  # o Qwen3.x "pensa" antes de responder e isso custa segundos; num modelo
+  # pequeno nao compensa, entao desligamos
+  no_think: true
+  # opcao de nuvem (mais inteligente, ~1s de latencia):
+  # model: deepseek/deepseek-chat
 
 home_assistant:
   # mock = simula os dispositivos localmente ate o HA real ser configurado

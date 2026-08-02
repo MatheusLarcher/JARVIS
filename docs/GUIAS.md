@@ -38,9 +38,33 @@ O cache é por hash(frase+perfil), então perfis convivem.
 
 ## Trocar o LLM
 
-`settings.yml → llm.model` usa string do LiteLLM: `deepseek/deepseek-chat`,
-`gemini/gemini-2.5-flash`, `anthropic/claude-sonnet-5`, `openai/gpt-...` etc.
-Chave via variável em `config/.env` (o nome fica em `llm.api_key_env`).
+`settings.yml → llm.model` usa string do LiteLLM. Hoje está em **modelo local**:
+
+```yaml
+llm:
+  model: ollama_chat/qwen3.5:0.8b     # roda na máquina, nada sai daqui
+  api_base: http://127.0.0.1:11434    # o Ollama precisa estar no ar
+  no_think: true                      # Qwen3.x "pensa" antes; num modelo
+                                      # pequeno isso só custa tempo
+```
+
+Nuvem (mais inteligente, ~1s de latência): `deepseek/deepseek-chat`,
+`gemini/gemini-2.5-flash`, `anthropic/claude-sonnet-5`, `openai/gpt-...` — aí
+tire o `api_base` e ponha a chave em `config/.env` (nome em `llm.api_key_env`).
+
+Baixar outro tamanho local: `ollama pull qwen3.5:4b` e trocar a tag.
+Comparar velocidade/qualidade: `python tests/bench_llm.py` (usa o que está
+configurado) ou `python tests/bench_llm.py <modelo-huggingface>`.
+
+**Modelos que "pensam"**: o raciocínio (`<think>...</think>`) nunca pode virar
+fala. Além do `no_think`, existe um filtro no stream (`_FiltroPensamento`, em
+`agents/agent.py`) que remove esses blocos mesmo se o modelo insistir —
+inclusive quando a tag chega partida entre dois pedaços do stream.
+
+**Rodar o LLM na CPU** (pra deixar a GPU livre pra outra coisa): crie uma
+variante no Ollama com `num_gpu 0` —
+`FROM qwen3.5:0.8b` + `PARAMETER num_gpu 0` num Modelfile, `ollama create
+qwen3.5-cpu -f Modelfile`, e aponte `llm.model` pra ela.
 
 ## MCP
 

@@ -141,6 +141,33 @@ Armadilhas descobertas aqui (todas custaram tempo):
   no meio da medição — o teste desliga o WebSocket do app durante a checagem.
 - Benchmark de STT com a GPU ocupada faz o Whisper cair pra CPU (45 s/frase vs 0,7 s).
 
+## LLM local + nome "Jarvis" na transcrição (2026-08-01)
+
+**LLM trocado para `ollama_chat/qwen3.5:0.8b`** (local, 1 GB) a pedido do Matheus.
+`api_base` aponta pro Ollama; `no_think: true` desliga o raciocínio do Qwen3.x e há
+um `_FiltroPensamento` no stream removendo `<think>...</think>` (com tag partida
+entre pedaços). Alternativa de nuvem comentada no settings.
+
+**A demora do LLM NÃO era o modelo.** Medições:
+- DeepSeek direto: 0,96s até a 1ª palavra; ADK por cima: +0,2s.
+- Mas pelo caminho do JARVIS dava 5,46s **na primeira pergunta** e 0,84s da segunda
+  em diante — era o agente sendo CONSTRUÍDO na 1ª chamada. Corrigido com
+  `agents.agent.aquecer()` chamado no lifespan (monta o agente + abre conexão).
+- Qwen3-1.7B local (4 bits, 1,26 GB): 0,41s mas erra fatos ("Santos Dumont foi um
+  escritor francês"). Qwen3-4B não chegou a ser medido.
+
+**Transcrição: o problema é o nome próprio.** No log real o STT escreve
+`Já, Luiz` / `Jairus` / `Já vi` / `Já Ravid` / `já abriu` no lugar de "Jarvis".
+Duas correções:
+1. `whisper.py` passa `initial_prompt` + `hotwords` com o nome e o vocabulário da
+   casa (`_hotwords_padrao()`), pro modelo saber que "Jarvis" existe;
+2. `wakeword.py` aceita variante FRACA do nome só quando o resto da frase é um
+   comando conhecido (`_parece_keyword` + `_eh_comando`) — assim "Já, Luiz. Acende
+   a luz da sala" funciona e a TV falando "já vi esse filme" não acorda o JARVIS.
+
+Falta medir (a GPU está ocupada com o treino do Matheus): velocidade real do
+qwen3.5:0.8b e o Canary como alternativa de STT.
+
 ## Janela do PC: arrastar, ocultar e transparência (2026-08-01)
 
 - Arrasta por qualquer ponto vazio (`-webkit-app-region: drag` no `.stage.desktop`);

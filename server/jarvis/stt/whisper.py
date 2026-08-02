@@ -18,6 +18,16 @@ from .base import SttEngine, SttStream
 log = logging.getLogger("jarvis.stt")
 
 
+def _hotwords_padrao() -> str:
+    """Palavras que o modelo precisa 'esperar' ouvir — o nome do assistente e o
+    vocabulário da casa. Sem isso o STT troca 'Jarvis' por 'Já Luiz'/'Jairus'."""
+    palavras = [config.settings["wake_word"].get("keyword", "jarvis").capitalize()]
+    palavras += list((config.house.get("house") or {}).keys())          # cômodos
+    palavras += ["luz", "luzes", "temperatura", "ligar", "desligar", "acender",
+                 "apagar", "navegador"]
+    return " ".join(dict.fromkeys(palavras))
+
+
 class WhisperStream(SttStream):
     def __init__(self, engine: "WhisperStt"):
         self.engine = engine
@@ -45,6 +55,13 @@ class WhisperStt(SttEngine):
         self.device = cfg.get("device", "cuda")
         self.compute_type = cfg.get("whisper_compute_type", "float16")
         self.lang = (cfg.get("language", "pt-BR") or "pt").split("-")[0]
+        self.beam_size = int(cfg.get("whisper_beam_size", 1))
+        # vocabulário da casa: nome do assistente, cômodos e comandos comuns
+        self.hotwords = cfg.get("hotwords") or _hotwords_padrao()
+        self.contexto = cfg.get("initial_prompt") or (
+            "Conversa com o assistente de voz Jarvis. "
+            "Exemplos: Jarvis, liga a luz da sala. Jarvis, desliga a luz do quarto. "
+            "Jarvis, que horas são? Jarvis, abre o navegador.")
         self.model = None
         self._infer_lock = threading.Lock()
 
@@ -71,8 +88,12 @@ class WhisperStt(SttEngine):
         try:
             with self._infer_lock:
                 segs, _ = self.model.transcribe(
-                    audio_f32, language=self.lang, beam_size=1,
-                    vad_filter=False, condition_on_previous_text=False)
+                    audio_f32, language=self.lang, beam_size=self.beam_size,
+                    vad_filter=False, condition_on_previous_text=False,
+                    # sem isto o modelo não conhece "Jarvis" e escreve
+                    # "Já Luiz", "Jairus", "Já vi"... quebrando o wake word
+                    initial_prompt=self.contexto,
+                    hotwords=self.hotwords)
                 return " ".join(s.text for s in segs).strip()
         except Exception:
             log.exception("erro transcrevendo (whisper)")
