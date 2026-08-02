@@ -21,3 +21,5 @@ server/data/watchdog.log
 apps/desktop/build/web/
 server/data/*.log.old
 tests/.cache/
+# gravacoes das suas falas (registro): ficam so na maquina
+server/data/gravacoes/

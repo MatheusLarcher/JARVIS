@@ -97,6 +97,45 @@ llm:
   # opcao de nuvem (mais inteligente, ~1s de latencia):
   # model: deepseek/deepseek-chat
 
+# Agentes: o modelo local roteia; cada agente cuida de um assunto.
+agentes:
+  # o roteador tambem responde trivialidades (hora, "so um momento...")
+  roteador:
+    modelo: ollama_chat/qwen3.5:0.8b   # herda api_base/no_think de llm:
+  lista:
+    - nome: casa
+      descricao: luzes, temperatura, dispositivos e automacoes da casa
+      exemplos: ["liga a luz da sala", "desliga tudo", "que temperatura esta"]
+    - nome: sistema
+      descricao: o proprio computador e o assistente (abrir programa, status, volume)
+      exemplos: ["abre o navegador", "como voce esta", "aumenta o volume"]
+    - nome: conversa
+      descricao: perguntas gerais, conhecimento, papo
+      exemplos: ["quem foi santos dumont", "me conta uma curiosidade"]
+    - nome: avancado
+      descricao: pedidos dificeis, que exigem raciocinio ou varios passos
+      exemplos: ["compara duas opcoes e me diz qual e melhor", "planeja meu dia"]
+      # so entra em acao se o provedor de nuvem estiver ligado abaixo
+      requer_nuvem: true
+
+# GPT-5.6 Luna: usado no agente "avancado" e pelo observador. Opcional -
+# com ativo: false o sistema roda 100% local, sem mandar nada pra fora.
+nuvem:
+  ativo: true
+  modelo: openai/gpt-5.6-luna
+  api_key_env: OPENAI_API_KEY
+
+# Registro: guarda audio + decisao de cada interacao (base pro aprendizado)
+registro:
+  ativo: true
+  guardar_dias: 30
+
+# Observador: anota o que vale aprender (nao entra no caminho da resposta)
+observador:
+  ativo: true
+  # so analisa quando houve sinal de problema, pra nao gastar API a toa
+  quando: [roteador_incerto, pedido_repetido, tarefa_falhou]
+
 home_assistant:
   # mock = simula os dispositivos localmente ate o HA real ser configurado
   mode: mock                # mock | real

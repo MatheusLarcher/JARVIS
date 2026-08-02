@@ -14,9 +14,15 @@ import time
 import numpy as np
 
 from ..config import config
+from ..intents.router import normalize
 from .base import SttEngine, SttStream
 
 log = logging.getLogger("jarvis.stt")
+
+
+def _palavras(texto: str) -> list[str]:
+    """Mesma normalização do Intent Router — sem acento e sem pontuação."""
+    return normalize(texto or "").split()
 
 
 def _hotwords_padrao() -> str:
@@ -78,8 +84,29 @@ class WhisperStt(SttEngine):
         # com o usuário dizendo "liga a luz da sala"). Só o nome já basta pra ele
         # parar de escrever "Já Luiz"/"Jairus".
         self.contexto = cfg.get("initial_prompt") or "Falando com o Jarvis."
+        self._palavras_prompt = set(_palavras(self.contexto))
         self.model = None
         self._infer_lock = threading.Lock()
+
+    def _eco(self, texto: str) -> bool:
+        """O Whisper devolveu o próprio initial_prompt?
+
+        Em silêncio ou ruído baixo ele repete o prompt, às vezes truncado e em
+        loop ("falando com falando com o jarvis f"). Como o prompt tem o nome
+        "Jarvis" dentro, isso passava pelo wake word e virava um pedido
+        fantasma, que chegou a acionar um agente (visto no E2E de 02/08/2026).
+
+        É eco quando NADA ali é novo (toda palavra é do prompt, ou um pedaço
+        de uma delas) e o prompt inteiro está presente. "Jarvis" sozinho, ou
+        "Falando com o Jarvis sobre energia solar", passam normalmente.
+        """
+        palavras = _palavras(texto)
+        if not palavras or not self._palavras_prompt:
+            return False
+        for p in palavras:
+            if not any(w == p or w.startswith(p) for w in self._palavras_prompt):
+                return False        # tem palavra de fora: é fala de verdade
+        return self._palavras_prompt <= set(palavras)
 
     async def load(self):
         await asyncio.get_running_loop().run_in_executor(None, self._load_sync)
@@ -109,7 +136,11 @@ class WhisperStt(SttEngine):
                     # "Já Luiz", "Jairus", "Já vi"... quebrando o wake word
                     initial_prompt=self.contexto,
                     hotwords=self.hotwords)
-                return " ".join(s.text for s in segs).strip()
+                texto = " ".join(s.text for s in segs).strip()
+            if self._eco(texto):
+                log.debug("descartei eco do prompt: %r", texto)
+                return ""
+            return texto
         except Exception:
             log.exception("erro transcrevendo (whisper)")
             return None

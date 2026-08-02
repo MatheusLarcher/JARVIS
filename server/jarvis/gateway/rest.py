@@ -19,7 +19,8 @@ async def audio_library(intent: str, name: str):
     path = (_LIB / intent / name).resolve()
     if not str(path).startswith(str(_LIB.resolve())) or not path.is_file():
         raise HTTPException(404)
-    return FileResponse(path)
+    # sem cache: trocar a voz tem que valer na hora, não quando o aparelho quiser
+    return FileResponse(path, headers={"Cache-Control": "no-store"})
 
 
 @router.get("/audio/tts/{name}")
@@ -27,7 +28,7 @@ async def audio_tts(name: str):
     path = (_TTS / name).resolve()
     if not str(path).startswith(str(_TTS.resolve())) or not path.is_file():
         raise HTTPException(404)
-    return FileResponse(path)
+    return FileResponse(path, headers={"Cache-Control": "no-store"})
 
 
 @router.get("/api/status")

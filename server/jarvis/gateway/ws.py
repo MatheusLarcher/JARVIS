@@ -45,7 +45,15 @@ async def ws_device(websocket: WebSocket, device_id: str, token: str | None = No
         except Exception:
             pass
 
-    dialog = DialogManager(device_id, send)
+    def pegar_audio():
+        """O PCM da última fala, uma vez só — senão gruda numa interação seguinte
+        que não veio de voz (pedido digitado, por exemplo)."""
+        pcm = getattr(pipeline, "audio_da_fala", None)
+        if pcm is not None:
+            pipeline.audio_da_fala = None
+        return pcm
+
+    dialog = DialogManager(device_id, send, obter_audio=pegar_audio)
 
     async def on_wake():
         activity.begin()
@@ -140,11 +148,14 @@ async def _handle_json(device_id: str, msg: dict, send, pipeline: AudioPipeline,
 
 def _ack_sounds() -> list[dict]:
     """Lista dos áudios de confirmação pro device baixar e cachear localmente."""
-    from ..tts.library import library
+    from ..tts.library import library as _lib
+    library = _lib
     folder = library.dir / "acknowledgement"
     if not folder.is_dir():
         return []
-    return [{"name": f.name, "url": f"/audio/library/acknowledgement/{f.name}"}
+    # a URL leva a versão do arquivo: trocar a voz invalida o cache do aparelho
+    return [{"name": f.name,
+             "url": library.url_de(f, "/audio/library/acknowledgement")}
             for f in sorted(folder.iterdir()) if f.suffix in (".mp3", ".wav")]
 
 

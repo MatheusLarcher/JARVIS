@@ -90,6 +90,8 @@ class AudioPipeline:
         self._end_silence = cfg["vad"]["end_silence_s"]
         self._max_utt = cfg["vad"]["max_utterance_s"]
         self._vad_threshold = cfg["vad"]["threshold"]
+        # com o registro desligado nem guardamos o áudio (config/settings.yml)
+        self._gravando = bool(cfg.get("registro", {}).get("ativo", True))
 
         self.phase = Phase.IDLE
         self.wake_model = None
@@ -99,6 +101,12 @@ class AudioPipeline:
         self._preroll = np.zeros(0, dtype=np.int16)
         self._wake_buf = np.zeros(0, dtype=np.int16)
         self._vad_buf = np.zeros(0, dtype=np.int16)
+        # áudio bruto da fala atual; vira gravação pro registro (memory/registro.py).
+        # Lista de pedaços, não um array crescendo: concatenar a cada frame de
+        # 80ms copiaria o buffer inteiro ~150 vezes por fala, dentro do loop.
+        self._pcm_fala: list[np.ndarray] = []
+        self._amostras_fala = 0
+        self.audio_da_fala: np.ndarray | None = None
         self._stt_stream = None
         self._parcial_task = None                       # transcrição em andamento
         self._pcm_pendente = np.zeros(0, dtype=np.int16)  # áudio que chegou durante ela
@@ -193,8 +201,13 @@ class AudioPipeline:
     def _begin_utterance(self, phase: Phase, preroll: bool):
         self.phase = phase
         self._stt_stream = Shared.stt_engine.new_stream()
+        self._pcm_fala = []
+        self._amostras_fala = 0
         if preroll and len(self._preroll):
             self._stt_stream.prime(self._preroll)   # sem transcrever: estamos no event loop
+            if self._gravando:
+                self._pcm_fala = [self._preroll.copy()]   # a gravação já começa com a fala
+                self._amostras_fala = len(self._preroll)
         self._preroll = np.zeros(0, dtype=np.int16)
         self._wake_buf = np.zeros(0, dtype=np.int16)
         self._vad_buf = np.zeros(0, dtype=np.int16)
@@ -212,6 +225,15 @@ class AudioPipeline:
     async def _feed_utterance(self, pcm: np.ndarray):
         loop = asyncio.get_running_loop()
         now = time.monotonic()
+
+        # guarda o áudio da fala (teto = a duração máxima permitida, sem surpresa
+        # de memória num servidor que fica ligado o dia todo)
+        if self._gravando:
+            self._pcm_fala.append(pcm)
+            self._amostras_fala += len(pcm)
+            limite = int(SAMPLE_RATE * (self._max_utt + 2))
+            while self._amostras_fala > limite and len(self._pcm_fala) > 1:
+                self._amostras_fala -= len(self._pcm_fala.pop(0))
 
         speaking = self._vad_prob(pcm) >= self._vad_threshold
         if speaking:
@@ -302,6 +324,7 @@ class AudioPipeline:
 
         if phase == Phase.COMMAND:
             if text:
+                self._publicar_audio()
                 await self.on_final(text)
             else:
                 self._reset_idle()
@@ -322,6 +345,7 @@ class AudioPipeline:
             await self.on_wake()
 
         if command:
+            self._publicar_audio()
             await self.on_final(command)          # comando veio na mesma frase
         else:
             await self.on_ack()                   # só chamou: responde e espera
@@ -329,10 +353,26 @@ class AudioPipeline:
             log.info("[%s] chamou sem comando; ouvindo o que vem agora",
                      self.device_id)
 
+    def _publicar_audio(self):
+        """Entrega o áudio da fala pro registro — só quando ela virou pedido.
+
+        Uma fala descartada (conversa na sala sem chamar o JARVIS) NÃO pode
+        ficar guardada aqui: a interação seguinte pegaria esse áudio de outra
+        pessoa e gravaria como se fosse o pedido dela.
+        """
+        if not self._gravando or not self._pcm_fala:
+            self.audio_da_fala = None
+            return
+        self.audio_da_fala = np.concatenate(self._pcm_fala)
+        self._pcm_fala = []
+        self._amostras_fala = 0
+
     # ------------------------------------------------------------------ estado
     def _reset_idle(self):
         self.phase = Phase.IDLE
         self._stt_stream = None
+        self._pcm_fala = []
+        self._amostras_fala = 0
         self._preroll = np.zeros(0, dtype=np.int16)
         self._wake_buf = np.zeros(0, dtype=np.int16)
         self._vad_buf = np.zeros(0, dtype=np.int16)

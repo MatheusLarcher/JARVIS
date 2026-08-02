@@ -20,6 +20,31 @@ responses:
     - "Um momento."
     - "Deixa eu ver."
     - "Verificando."
+  # cumprimento nao passa por LLM nenhum: sai na hora, com audio pronto
+  # (o modelo pequeno, solto, ainda respondia "<uma frase curta>" em voz alta)
+  saudacao_manha:
+    - "Bom dia."
+    - "Bom dia, senhor."
+    - "Bom dia. Às ordens."
+  saudacao_tarde:
+    - "Boa tarde."
+    - "Boa tarde, senhor."
+    - "Boa tarde. Em que posso ajudar?"
+  saudacao_noite:
+    - "Boa noite."
+    - "Boa noite, senhor."
+    - "Boa noite. Às ordens."
+  saudacao:
+    - "Olá."
+    - "Às ordens."
+    - "Estou aqui."
+  agradecimento:
+    - "Disponha."
+    - "Sempre às ordens."
+    - "Por nada."
+  despedida:
+    - "Até logo."
+    - "Estarei por aqui."
   not_understood:
     - "Desculpe, não entendi."
     - "Pode repetir?"

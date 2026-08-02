@@ -33,7 +33,12 @@ reator respirando. É só falar "Jarvis".
 - "liga / desliga a luz" (da sala, do quarto, do escritório — ou do cômodo onde você está)
 - "que horas são?"
 - "qual a temperatura?"
+- "bom dia", "obrigado" — ele responde na hora, sem pensar
 - Qualquer outra pergunta vai pra IA e volta falada.
+
+As três primeiras e os cumprimentos são resolvidos por regra, sem IA nenhuma — por isso
+saem instantâneos. O resto passa por um modelo pequeno que decide qual "especialista"
+cuida do pedido (casa, computador, conversa, ou os difíceis na nuvem).
 
 No celular e no relógio também dá pra **tocar no reator** pra falar sem chamar pelo nome.
 
@@ -51,4 +56,5 @@ edite `config\settings.yml` (`home_assistant: mode: real` + url) e coloque o tok
 ## Documentação técnica
 
 Está em [`docs/`](docs/): arquitetura, APIs, como adicionar skills, dispositivos,
-trocar STT/TTS/LLM e a memória do projeto.
+trocar STT/TTS/LLM e a memória do projeto. Os agentes, o registro das interações e o
+observador estão em [docs/AGENTES.md](docs/AGENTES.md).

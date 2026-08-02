@@ -14,6 +14,21 @@ intents:
       - '\b(desliga|desligar|apaga|apagar|desativa|desativar)\b.*\b(luz|luzes|lampada|iluminacao)\b(?:.*\b(?:da|do|de|na|no)\s+(?P<room>sala|quarto|escritorio|cozinha|banheiro)\b)?'
     response_intent: light_off_success
 
+  # cumprimentos: resposta pronta, sem LLM (0ms). Ancorados no comeco da frase
+  # pra nao roubar pedidos que so mencionam a palavra ("me da bom dia em ingles")
+  - id: social.greeting
+    patterns:
+      - '^(oi|ola|opa|salve|e ai|eai|bom dia|boa tarde|boa noite)\b\s*(jarvis)?\s*$'
+    response_intent: null   # escolhido pela hora do dia
+
+  - id: social.thanks
+    patterns:
+      - '^(muito\s+)?(obrigad[oa]|brigad[oa]|valeu|vlw)\b\s*(jarvis)?\s*$'
+
+  - id: social.bye
+    patterns:
+      - '^(tchau|ate mais|ate logo|falou)\b\s*$'
+
   - id: info.time
     patterns:
       - '\bque horas\b'

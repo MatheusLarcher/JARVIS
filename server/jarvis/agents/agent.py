@@ -171,21 +171,32 @@ def _build():
 
 
 async def aquecer():
-    """Monta o agente e abre a conexão com o provedor no start do servidor.
+    """Monta os agentes e abre a conexão com o provedor no start do servidor.
 
     Sem isto, a PRIMEIRA pergunta paga tudo isso e demora ~5,5s em vez de ~0,8s
-    (medido em tests/diag_llm_stream.py).
+    (medido em tests/diag_llm_stream.py). E como quem atende agora é sempre um
+    especialista, aquecer só o agente antigo não adiantava nada: cada agente
+    era montado a frio, dentro do event loop, na primeira vez que era escolhido.
     """
     try:
-        if _runner is None:
-            _build()
+        from .especialistas import construir
+        from .roteador import agentes_disponiveis
+        for a in agentes_disponiveis():
+            try:
+                # montar agente do ADK é síncrono e pesado: fora do event loop
+                await asyncio.to_thread(construir, a["nome"])
+            except Exception as e:
+                log.warning("não deu pra montar o agente '%s': %s", a["nome"], e)
         from litellm import acompletion
         cfg = config.settings["llm"]
+        # max_tokens tem que ir DENTRO do dict: _extras_llm já traz o dele e
+        # passar solto dá "multiple values for keyword argument" — o aquecimento
+        # falhava calado e a 1a pergunta voltava a custar ~4,5s
+        extras = {**_extras_llm(cfg), "max_tokens": 1}
         # com modelo local, esta chamada também tira o modelo do disco e o
         # deixa carregado — a primeira pergunta de verdade já sai rápida
         await acompletion(model=cfg["model"],
-                          messages=[{"role": "user", "content": "oi"}],
-                          max_tokens=1, **_extras_llm(cfg))
+                          messages=[{"role": "user", "content": "oi"}], **extras)
         log.info("agente pronto (aquecido): %s", cfg["model"])
     except Exception as e:
         log.warning("não deu pra aquecer o agente agora: %s", e)
@@ -239,27 +250,41 @@ async def _montar_prompt(transcript: str, ctx: DeviceContext) -> str:
         resposta = h["jarvis"][:limite]
         linhas.append(f"Usuário: {h['user'][:limite]}\nJARVIS: {resposta}")
     hist_txt = "\n".join(linhas)
+    # O pedido de AGORA precisa vir marcado. Sem isso ele ficava colado no fim
+    # do histórico e o modelo pequeno respondia a pergunta ANTERIOR (o agente
+    # "conversa", perguntado sobre o descobrimento do Brasil, falou de energia
+    # solar — assunto da interação passada).
     return (
         f"[dispositivo={ctx.device_type}, local={ctx.place}, cômodo={ctx.room}]\n"
-        + (f"[conversa recente]\n{hist_txt}\n" if hist_txt else "")
-        + transcript
+        + (f"[conversa anterior, só como contexto]\n{hist_txt}\n\n" if hist_txt else "")
+        + f"PEDIDO AGORA: {transcript}\n"
+        + "Responda APENAS a este pedido."
     )
 
 
-async def ask_stream(transcript: str, ctx: DeviceContext):
+async def ask_stream(transcript: str, ctx: DeviceContext, agente: str | None = None):
     """Roda o agente e vai entregando o texto conforme ele escreve.
 
     Isso é o que permite começar a falar antes do LLM terminar. Cada item é um
     trecho NOVO de texto (não o acumulado).
+
+    `agente` escolhe um especialista (agents/especialistas.py); sem ele, usa o
+    agente único de sempre.
     """
     global _runner
-    if _runner is None:
-        _build()
     from google.adk.agents.run_config import RunConfig, StreamingMode
     from google.genai import types
 
+    if agente:
+        from .especialistas import construir
+        runner, sessoes, app = (*construir(agente), f"jarvis_{agente}")
+    else:
+        if _runner is None:
+            _build()
+        runner, sessoes, app = _runner, _session_service, APP
+
     prompt = await _montar_prompt(transcript, ctx)
-    session = await _session_service.create_session(app_name=APP, user_id=ctx.user_id)
+    session = await sessoes.create_session(app_name=app, user_id=ctx.user_id)
     content = types.Content(role="user", parts=[types.Part(text=prompt)])
     enviado = ""
     filtro = _FiltroPensamento()
@@ -267,7 +292,7 @@ async def ask_stream(transcript: str, ctx: DeviceContext):
     corte = _CortaResposta(int(cfg_llm.get("max_frases", 1)),
                            int(cfg_llm.get("max_palavras", 25)))
     try:
-        async for event in _runner.run_async(
+        async for event in runner.run_async(
                 user_id=ctx.user_id, session_id=session.id, new_message=content,
                 run_config=RunConfig(streaming_mode=StreamingMode.SSE)):
             if not (event.content and event.content.parts):
@@ -302,14 +327,14 @@ async def ask_stream(transcript: str, ctx: DeviceContext):
     finally:
         # sessão é descartável (histórico vem do SQLite); sem isso vaza memória no 24/7
         try:
-            await _session_service.delete_session(app_name=APP, user_id=ctx.user_id,
-                                                  session_id=session.id)
+            await sessoes.delete_session(app_name=app, user_id=ctx.user_id,
+                                         session_id=session.id)
         except Exception:
             pass
 
 
-async def ask(transcript: str, ctx: DeviceContext) -> str | None:
+async def ask(transcript: str, ctx: DeviceContext, agente: str | None = None) -> str | None:
     """Resposta completa (sem streaming) — usado em testes e como reserva."""
-    partes = [p async for p in ask_stream(transcript, ctx)]
+    partes = [p async for p in ask_stream(transcript, ctx, agente)]
     texto = "".join(partes).strip()
     return texto or None

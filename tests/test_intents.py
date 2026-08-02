@@ -22,6 +22,18 @@ CASES = [
     ("que horas são?", "info.time", {}),
     ("qual a temperatura?", "info.temperature", {}),
     ("me conta uma piada", None, {}),
+    # cumprimentos: resposta pronta, sem passar por LLM nenhum
+    ("bom dia", "social.greeting", {}),
+    ("Bom dia, Jarvis", "social.greeting", {}),
+    ("oi", "social.greeting", {}),
+    ("boa noite", "social.greeting", {}),
+    ("obrigado", "social.thanks", {}),
+    ("valeu, Jarvis", "social.thanks", {}),
+    ("tchau", "social.bye", {}),
+    # ...mas cumprimento no meio de um pedido NÃO pode virar saudação
+    ("bom dia, liga a luz da sala", "light.turn_on", {"room": "sala"}),
+    ("como se diz bom dia em inglês", None, {}),
+    ("obrigado por avisar, agora abre o navegador", None, {}),
 ]
 
 

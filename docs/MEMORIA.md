@@ -221,6 +221,72 @@ código. O cache do HuggingFace (50 GB) foi movido para `D:\ai-cache\huggingface
 `HF_HOME` está setado na conta do usuário E nos dois `.bat` (sem isso o cache volta pro
 C: e baixa tudo de novo). C: ficou com ~65 GB livres.
 
+## Multi-agente: roteador + especialistas + observador (2026-08-02) — ver [AGENTES.md](AGENTES.md)
+
+Decisão em três camadas, da mais barata pra mais cara: **Intent Router (regex, 0ms) →
+roteador `qwen3.5:0.8b` (~0,35s) → agente especialista**. Agentes: `casa`, `sistema`,
+`conversa` e `avancado` (GPT-5.6 Luna, nuvem opcional). Cada interação vira **registro**
+(WAV + transcrição + rota + resposta) e o **observador** relê só o que deu sinal de
+problema. Validado com voz real ponta a ponta (`tests/test_agentes_e2e.py`, 4/4) e
+14/14 de acerto de destino em `tests/bench_roteador.py`.
+
+Bugs reais achados e corrigidos nesta etapa:
+
+- **`aquecer()` do agente falhava calado** desde que `max_tokens` entrou em `_extras_llm`:
+  `acompletion(..., max_tokens=1, **extras)` = "multiple values for keyword argument".
+  Resultado: a primeira pergunta voltava a custar ~4,5s. Regra: `max_tokens` sempre
+  DENTRO do dict (`{**_extras_llm(cfg), "max_tokens": N}`). O mesmo padrão estava no
+  observador.
+- **Whisper alucinando o próprio `initial_prompt`** em silêncio ("falando com falando com
+  o jarvis f"). Como o prompt tem "Jarvis" dentro, passava pelo wake word e virou um
+  pedido fantasma que ACIONOU UM AGENTE. Filtro `WhisperStt._eco()` (comparação por
+  palavra, não por substring — substring não pega o truncado).
+- **`pedido_repetido` comparava a interação com ela mesma** (a checagem roda depois de
+  gravar): 5 de 5 interações acionaram o observador no primeiro teste real. Corrigido com
+  `ignorar_id`.
+- **Modelo pequeno respondendo a pergunta ANTERIOR**: o pedido atual ficava colado no fim
+  do histórico sem marcação. Agora vai como `PEDIDO AGORA: ...` + "Responda APENAS a este
+  pedido".
+- **Roteador inventando fato** ("aumenta o volume" → explicação falsa) e **falando o molde
+  do prompt em voz alta** (`<uma frase curta>`). Trava no servidor: resposta direta só pra
+  papo social + filtro de lixo. Cumprimento virou intent local com áudio pronto.
+- `library.pick()` devolvia None pra intent sem wav gerado e o JARVIS ficava **mudo**;
+  agora cai no TTS com uma das frases do `responses.yml`.
+- `test_audio_e2e.py` rodava inteiro ao ser importado por outro teste → guarda
+  `if __name__ == "__main__"`.
+
+Achados da revisão de código da mesma etapa (todos corrigidos e validados):
+
+- **A janela do PC ficava PRESA na tela depois de toda resposta pronta.** O device liga
+  "estou falando" no `speak` de seq 0 e só desliga no `speak_end` — e o caminho da
+  biblioteca ("Pronto.", "Bom dia.") nunca mandava `speak_end`. Bug pré-existente que os
+  cumprimentos novos escancararam. Agora `_fim_da_fala()` fecha TODOS os caminhos
+  (`tests/test_fim_da_fala.py` cobre os 7; provado no EXE instalado com
+  `tests/test_janela_destrava.py`).
+- **O registro segurava o microfone.** WAV + 2 commits do SQLite rodavam antes de
+  `pipeline.set_idle()`, com o pipeline em BUSY: dava pra falar e ele não ouvir. Agora o
+  PCM é capturado na hora e o resto vai pra `asyncio.create_task`.
+- **`aquecer()` preparava o agente errado.** Como quem atende agora é sempre um
+  especialista, cada um era montado a frio (Agent + Runner + `load_toolsets()`) DENTRO do
+  event loop na primeira vez que era escolhido. Agora aquece os 4 no start, em thread.
+- **`avancado` era oferecido sem a chave da nuvem**: numa máquina sem `config/.env` (que é
+  gitignored), toda pergunta difícil morria em erro de autenticação engolido e voltava
+  como "não entendi", sem pista nenhuma. `nuvem_disponivel()` agora exige a chave, e o
+  agente some da lista sem ela.
+- **Áudio de fala DESCARTADA vazava pro registro seguinte**: conversa na sala sem chamar o
+  JARVIS ficava guardada e era gravada como se fosse o pedido seguinte. O áudio só é
+  publicado quando a fala vira pedido (`_publicar_audio`).
+- Buffer de gravação era `np.concatenate` a cada frame de 80ms (~150 cópias por fala, no
+  event loop) → lista de pedaços + um concat no fim, e nem roda com `registro.ativo: false`.
+- `registros` crescia pra sempre (só os WAV eram apagados) → `limpar_registros(corte)` no
+  start; e o `rmdir` da pasta do dia estava DENTRO do `except StopIteration`, então um erro
+  ali abortava a limpeza dos dias seguintes.
+- `Registro.erro` nunca era preenchido → o gatilho `tarefa_falhou` do observador era letra
+  morta. Agora skill que falha e agente mudo gravam o motivo.
+
+Regra que ficou: **exemplos por agente são o que mais move a agulha** no roteador — com 2
+exemplos "que temperatura está aqui" ia pro `sistema`; com 3, foi pro `casa`.
+
 ## Decisões e aprendizados importantes
 
 - **Wake word e VAD são STATEFUL → uma instância POR CONEXÃO** (`AudioPipeline.init()`).
@@ -258,6 +324,16 @@ C: e baixa tudo de novo). C: ficou com ~65 GB livres.
 - [ ] Cache-aware streaming nativo do Nemotron (att_context_size) pra baixar a latência do parcial.
 - [ ] GIF de demo no README.
 - [ ] Contexto por GPS/Bluetooth/geofence (hoje: rede Wi-Fi + device_id + configuração manual).
+- [ ] LoRA no `qwen3.5:0.8b` com os registros gravados, pra ele rotear melhor com o jeito
+      do Matheus falar (o registro já guarda áudio + rota + correção do observador; falta
+      juntar volume de dados de uso real).
+- [ ] Ferramentas de verdade pro agente `sistema` (hoje ele só sabe dizer que não sabe).
+- [ ] Tela pra ouvir/corrigir os registros (hoje só `tests/ver_registros.py` no terminal).
+- [ ] **Cache do "Sim?" no Android ignora a troca de voz.** O servidor manda a URL com
+      `?v=<mtime>`, mas `AudioEngine.kt` guarda o arquivo por NOME (`ack_$name`) e pula o
+      download se já existir — trocar a voz não chega no celular/relógio. Achado na revisão
+      de 02/08; não corrigido porque não dá pra validar sem o aparelho na mão. Correção:
+      usar a URL inteira (ou o `v=`) na chave do arquivo em cache.
 
 ## Configurações que dependem do usuário
 

@@ -18,6 +18,18 @@ logging.basicConfig(level=logging.INFO,
 log = logging.getLogger("jarvis")
 
 
+async def _limpar_registros_antigos():
+    """Gravações e linhas do registro além do prazo (registro.guardar_dias)."""
+    try:
+        from .memory.registro import limpar_antigas
+        corte = await asyncio.to_thread(limpar_antigas)
+        linhas = await store.limpar_registros(corte)
+        if linhas:
+            log.info("removi %d registros antigos do banco", linhas)
+    except Exception:
+        log.exception("falha limpando registros antigos")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await store.open()
@@ -26,6 +38,9 @@ async def lifespan(app: FastAPI):
     # deixa o agente pronto antes da primeira pergunta (economiza ~4,5s nela)
     from .agents.agent import aquecer as aquecer_agente
     asyncio.create_task(aquecer_agente())
+
+    # gravações velhas somem sozinhas (registro.guardar_dias), com as linhas junto
+    asyncio.create_task(_limpar_registros_antigos())
 
     warm_task = None
     if config.settings["tts"].get("cache_warmer"):
