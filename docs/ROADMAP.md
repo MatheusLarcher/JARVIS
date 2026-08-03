@@ -51,11 +51,12 @@ material para o item 6.
 A senha antiga ficou no histórico do git. Como o APK não foi publicado em loja
 nenhuma, gerar um keystore novo é indolor. Ver [SEGURANCA.md](SEGURANCA.md).
 
-### 5. Decidir sobre a voz clonada no repositório
+### 5. ~~Decidir sobre a voz clonada no repositório~~ — resolvido em 02/08/2026
 
-34 wav com a voz clonada estão versionados. Publicar = distribuir um clone de
-voz. Se a referência é de outra pessoa, há consentimento de terceiro
-envolvido. Instruções para tirar em [SEGURANCA.md](SEGURANCA.md).
+A voz do JARVIS (`jarvis_ref.wav`) sobe, porque é o que permite regerar a
+biblioteca. O áudio de uso — o assistente respondendo e as gravações dos seus
+pedidos — não sobe, e foi apagado do histórico. Ver
+[SEGURANCA.md](SEGURANCA.md).
 
 ---
 

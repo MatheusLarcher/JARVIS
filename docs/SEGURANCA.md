@@ -9,8 +9,8 @@ antes de abrir o projeto, e o que fazer se algo vazar.
 |---|---|---|
 | Chaves de API (OpenAI, DeepSeek, Home Assistant) | `config/.env` | acesso pago/privado em nome seu |
 | Tokens dos aparelhos | `config/devices.yml` | quem tem o token fala com o seu assistente |
-| Referência da voz clonada | `server/data/voice/` | é a voz de uma pessoa real |
 | Gravações das suas falas | `server/data/gravacoes/` | áudio seu, dentro de casa |
+| O JARVIS respondendo | `server/data/library/`, `tts_cache/` | áudio de uso do dia a dia |
 | Keystore de assinatura do Android | `apps/android/*.keystore` + senha | permite assinar updates no seu nome |
 | Banco e cache | `server/data/jarvis.db`, `tts_cache/` | contém o que você falou |
 
@@ -43,15 +43,28 @@ a pendência abaixo).
 > **Pendente com você:** trocar a senha do keystore (ou gerar um novo). Como o
 > APK ainda não foi publicado em loja nenhuma, gerar outro é indolor.
 
-**3. Voz clonada versionada — decisão sua.**
-`server/data/library/` tem 34 WAV com a voz clonada falando ("Pronto.",
-"Bom dia."…). A *referência* nunca foi versionada, mas esses arquivos são
-saída dela. Publicar = distribuir um clone de voz. Se a voz de referência é de
-outra pessoa, há consentimento de terceiro envolvido.
+**3. Áudio de uso versionado — resolvido, com reescrita de histórico.**
+`server/data/library/` tinha 34 WAV do JARVIS respondendo ("Pronto.",
+"Bom dia."…). Decisão: **a voz do JARVIS sobe, o áudio de uso não.**
 
-Se decidir tirar: `git rm -r --cached server/data/library`, adicionar ao
-`.gitignore` e rodar `python server/scripts/build_library.py` depois de clonar
-— o JARVIS continua funcionando, e sem os wavs ele cai no TTS na hora
+- **Sobe:** `server/data/voice/jarvis_ref.wav` — é a referência do clone. Com
+  ela, quem clonar o repositório regera a biblioteca na mesma voz.
+- **Não sobe:** a biblioteca, o cache do TTS e as gravações dos seus pedidos.
+
+Tirar do tracking **não bastava**: os 34 arquivos estavam em 5 commits do
+histórico e voltariam com qualquer clone. Como o repositório ainda não tinha
+remote, o histórico foi reescrito com
+`git filter-repo --path server/data/library --invert-paths`. Resultado: 0
+ocorrências em qualquer commit, `.git` de 20,6 MB → 2,2 MB, e os arquivos
+intactos no disco (o assistente não perdeu a voz — validado depois).
+
+Quem clonar recupera o áudio pronto com:
+
+```
+python server/scripts/build_library.py
+```
+
+Sem isso ele continua falando, só que sintetizando na hora
 (`library.texto_qualquer`).
 
 ### Sem problema

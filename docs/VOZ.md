@@ -7,11 +7,12 @@ multilíngue** rodando na GPU local. Uso doméstico/pessoal deste assistente.
 
 | Onde | O quê |
 |---|---|
-| `server/data/voice/jarvis_ref.wav` | amostra de referência (mono 24 kHz, ~11 s) — **fora do git**, fica só na máquina; se sumir, rode o `prepare_voice_ref.py` de novo com o áudio original |
+| `server/data/voice/jarvis_ref.wav` | amostra de referência (mono 24 kHz, ~11 s) — **é a única coisa de áudio versionada**: com ela quem clonar regera a biblioteca na mesma voz. Se sumir, rode o `prepare_voice_ref.py` de novo com o áudio original |
 | `server/voice_service/service.py` | serviço HTTP na **porta 8041** (env `jarvis-tts`) |
 | `server/jarvis/tts/engine.py` | engine `clone` (chama o serviço) + `edge` (reserva) |
 | `server/jarvis/tts/warmer.py` | pré-gera frases previsíveis (hora, temperatura) |
 | `config/settings.yml → tts.voice_profiles` | perfis `jarvis_br` (clone) e `jarvis_edge` |
+| `server/data/library/` | as frases prontas já sintetizadas — **fora do git** (é o assistente falando, áudio de uso). Depois de clonar, gere com `build_library.py`; sem elas ele sintetiza na hora |
 
 Ambientes separados de propósito: o Chatterbox pina `torch==2.6` e o servidor precisa de
 `torch cu128` (RTX 5050 = sm_120). O env `jarvis-tts` tem torch cu128 instalado por cima do
