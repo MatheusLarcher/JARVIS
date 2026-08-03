@@ -2,10 +2,15 @@
 // quando o wake word dispara e some quando volta ao repouso.
 const { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage } = require('electron')
 const fs = require('fs')
+const net = require('net')
 const path = require('path')
+const { spawn } = require('child_process')
 
 const DEVICE_ID = 'pc-matheus'
 const DEFAULT_HOST = '127.0.0.1:8040'
+const PORTA_SERVIDOR = 8040
+const PORTA_VOZ = 8041
+const PORTA_OLLAMA = 11434
 
 let win = null
 let tray = null
@@ -33,22 +38,58 @@ function log(msg) {
 process.on('uncaughtException', (e) => log(`ERRO nao tratado: ${e && e.stack}`))
 app.setAppUserModelId('com.larchertech.jarvis')
 
+// Onde está o repositório do JARVIS. O app instalado precisa dele para ler o
+// token e para subir o servidor — sem isto ele é só uma casca.
+// Ordem: o que já foi salvo > variável de ambiente > o caminho gravado no build
+// (sync-web) > o repo relativo, que é o caso do dev.
+// Sem caminho absoluto chutado aqui: o do build é o que vale, e chute vira
+// caminho da máquina de outra pessoa dentro do repositório.
+function achaProjeto(cfg) {
+  let doBuild = null
+  try {
+    doBuild = JSON.parse(fs.readFileSync(path.join(__dirname, 'build', 'projeto.json'), 'utf-8')).raiz
+  } catch { }
+  const candidatos = [
+    cfg && cfg.projeto,
+    process.env.JARVIS_HOME,
+    doBuild,
+    path.join(__dirname, '..', '..'),
+  ]
+  for (const c of candidatos) {
+    if (!c) continue
+    try {
+      if (fs.existsSync(path.join(c, 'server', 'start_jarvis.bat')) &&
+          fs.existsSync(path.join(c, 'config', 'settings.yml'))) return path.resolve(c)
+    } catch { }
+  }
+  return null
+}
+
+function tokenDoDevices(raiz, device) {
+  try {
+    const yml = path.join(raiz, 'config', 'devices.yml')
+    const devs = require('js-yaml').load(fs.readFileSync(yml, 'utf-8')).devices
+    return (devs[device] || {}).token || null
+  } catch { return null }
+}
+
 function readConfig() {
-  // instalado: %APPDATA%/jarvis-desktop/config.json | dev: lê o devices.yml do repo
+  // instalado: %APPDATA%/JARVIS/config.json (o nome vem do productName)
   const cfgPath = path.join(app.getPath('userData'), 'config.json')
   let cfg = { host: DEFAULT_HOST, device: DEVICE_ID, token: '' }
   try { cfg = { ...cfg, ...JSON.parse(fs.readFileSync(cfgPath, 'utf-8')) } } catch { }
-  if (!cfg.token) {
-    // dev: yml relativo ao repo; instalado: procura o projeto no lugar padrão
-    const candidates = [
-      path.join(__dirname, '..', '..', 'config', 'devices.yml'),
-      path.join(app.getPath('home'), 'Documents', 'GitHub', 'JARVIS', 'config', 'devices.yml'),
-    ]
-    for (const p of candidates) {
-      try {
-        const devs = require('js-yaml').load(fs.readFileSync(p, 'utf-8')).devices
-        if (devs[cfg.device]) { cfg.token = devs[cfg.device].token; break }
-      } catch { }
+
+  const raiz = achaProjeto(cfg)
+  if (raiz) {
+    cfg.projeto = raiz
+    // O devices.yml é a FONTE DA VERDADE do token, sempre — não só quando falta.
+    // Antes a cópia daqui só era preenchida se estivesse vazia, então uma rotação
+    // de token deixava o app tentando entrar com o antigo e o servidor recusando
+    // com 4401, sem nada indicando o motivo.
+    const tok = tokenDoDevices(raiz, cfg.device)
+    if (tok && tok !== cfg.token) {
+      log(`token de ${cfg.device} atualizado a partir do devices.yml`)
+      cfg.token = tok
     }
   }
   salvaConfig(cfg)
@@ -60,6 +101,81 @@ function salvaConfig(cfg) {
     fs.writeFileSync(path.join(app.getPath('userData'), 'config.json'),
                      JSON.stringify(cfg, null, 2))
   } catch { }
+}
+
+// ---------------------------------------------------------------------------
+// Serviços: o app da bandeja é quem garante que o JARVIS inteiro esteja no ar.
+// Ele já entra na inicialização do Windows, então abrir o app = ligar tudo.
+// ---------------------------------------------------------------------------
+function portaAberta(porta, timeout = 800) {
+  return new Promise((resolve) => {
+    const s = new net.Socket()
+    let pronto = false
+    const fim = (ok) => { if (!pronto) { pronto = true; s.destroy(); resolve(ok) } }
+    s.setTimeout(timeout)
+    s.once('connect', () => fim(true))
+    s.once('timeout', () => fim(false))
+    s.once('error', () => fim(false))
+    s.connect(porta, '127.0.0.1')
+  })
+}
+
+function roda(cmd, args) {
+  try {
+    const p = spawn(cmd, args, { detached: true, stdio: 'ignore', windowsHide: true })
+    p.unref()
+    return true
+  } catch (e) {
+    log(`nao consegui rodar ${cmd}: ${e && e.message}`)
+    return false
+  }
+}
+
+function ollamaExe() {
+  const local = path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Ollama', 'ollama.exe')
+  return fs.existsSync(local) ? local : 'ollama'
+}
+
+// carrega os modelos: dar tempo antes de tentar subir de novo
+const ESPERA_SUBIDA_MS = 120000
+const subindo = {}
+
+function jaSubindo(chave) {
+  const agora = Date.now()
+  if (subindo[chave] && agora - subindo[chave] < ESPERA_SUBIDA_MS) return true
+  subindo[chave] = agora
+  return false
+}
+
+async function garanteServicos(cfg) {
+  const raiz = cfg.projeto
+  const estado = {
+    ollama: await portaAberta(PORTA_OLLAMA),
+    servidor: await portaAberta(PORTA_SERVIDOR),
+    voz: await portaAberta(PORTA_VOZ),
+  }
+  if (!raiz) {
+    // sem o cooldown isto escreveria no log a cada 30s, pra sempre
+    if (!estado.servidor && !jaSubindo('sem-projeto')) {
+      log('servidor fora do ar e nao achei o projeto (defina JARVIS_HOME ou o ' +
+          'campo "projeto" no config.json) — nao da pra subir sozinho')
+    }
+    return estado
+  }
+
+  if (!estado.ollama && !jaSubindo('ollama')) {
+    log('Ollama fora do ar; subindo')
+    roda(ollamaExe(), ['serve'])
+  }
+  if (!estado.servidor && !jaSubindo('servidor')) {
+    // o .vbs roda o start_jarvis.bat sem janela de console; ele já sobe a voz junto
+    log('servidor fora do ar; subindo (leva ~1min carregando os modelos)')
+    roda('wscript.exe', [path.join(raiz, 'server', 'start_jarvis_hidden.vbs')])
+  } else if (estado.servidor && !estado.voz && !jaSubindo('voz')) {
+    log('servico de voz fora do ar; subindo')
+    roda('cmd.exe', ['/c', path.join(raiz, 'server', 'start_voice.bat')])
+  }
+  return estado
 }
 
 function posicaoInicial(cfg) {
@@ -196,10 +312,18 @@ function scheduleHide() {
   }, 3000)
 }
 
-function buildTray(cfg) {
-  tray = new Tray(nativeImage.createFromPath(path.join(__dirname, 'build', 'tray.png')))
-  tray.setToolTip('JARVIS — dizer "Hey Jarvis" ou clicar pra falar')
-  const menu = Menu.buildFromTemplate([
+// estado dos serviços mostrado na bandeja (sem isto, servidor fora do ar é
+// indistinguível de "ninguém falou com ele")
+let estadoServicos = { ollama: false, servidor: false, voz: false }
+
+function atualizaMenu(cfg) {
+  if (!tray) return
+  const marca = (ok) => (ok ? 'no ar' : 'fora do ar')
+  const tudo = estadoServicos.servidor && estadoServicos.voz && estadoServicos.ollama
+  tray.setToolTip(tudo
+    ? 'JARVIS — dizer "Jarvis" ou clicar pra falar'
+    : 'JARVIS — subindo os serviços...')
+  tray.setContextMenu(Menu.buildFromTemplate([
     {
       label: 'Mostrar Jarvis', click: () => {
         pinned = true
@@ -213,11 +337,21 @@ function buildTray(cfg) {
       click: (item) => app.setLoginItemSettings({ openAtLogin: item.checked }),
     },
     { type: 'separator' },
-    { label: `Servidor: ${cfg.host}`, enabled: false },
+    { label: `Servidor (${cfg.host}): ${marca(estadoServicos.servidor)}`, enabled: false },
+    { label: `Voz: ${marca(estadoServicos.voz)}`, enabled: false },
+    { label: `Ollama: ${marca(estadoServicos.ollama)}`, enabled: false },
+    {
+      label: 'Verificar agora',
+      click: async () => { estadoServicos = await garanteServicos(cfg); atualizaMenu(cfg) },
+    },
     { type: 'separator' },
     { label: 'Sair', click: () => { win.destroy(); app.quit() } },
-  ])
-  tray.setContextMenu(menu)
+  ]))
+}
+
+function buildTray(cfg) {
+  tray = new Tray(nativeImage.createFromPath(path.join(__dirname, 'build', 'tray.png')))
+  atualizaMenu(cfg)
   tray.on('click', () => {
     if (win.isVisible()) { pinned = false; win.hide() }
     else { pinned = true; win.show() }
@@ -226,7 +360,8 @@ function buildTray(cfg) {
 
 app.whenReady().then(() => {
   const cfg = readConfig()
-  log(`iniciando (empacotado=${app.isPackaged}) servidor=${cfg.host} device=${cfg.device} token=${cfg.token ? 'ok' : 'AUSENTE'}`)
+  log(`iniciando (empacotado=${app.isPackaged}) servidor=${cfg.host} device=${cfg.device} ` +
+      `token=${cfg.token ? 'ok' : 'AUSENTE'} projeto=${cfg.projeto || 'NAO ACHEI'}`)
   // mic sem prompt (app confiável local)
   const ses = require('electron').session.defaultSession
   ses.setPermissionRequestHandler((_wc, permission, cb) => cb(permission === 'media'))
@@ -235,6 +370,15 @@ app.whenReady().then(() => {
   if (app.isPackaged && process.argv.indexOf('--no-autostart') === -1) {
     app.setLoginItemSettings({ openAtLogin: true })
   }
+
+  // sobe o que estiver faltando e continua vigiando: o app é o supervisor do
+  // JARVIS, não só a janela dele
+  const vigia = async () => {
+    estadoServicos = await garanteServicos(cfg)
+    atualizaMenu(cfg)
+  }
+  vigia()
+  setInterval(vigia, 30000)
 
   ipcMain.on('jarvis-wake', () => { processando = true; showReactor() })
   ipcMain.on('jarvis-state', (_e, state) => {

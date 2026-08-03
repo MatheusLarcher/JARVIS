@@ -19,9 +19,14 @@ from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parents[2]
 DEVICES = RAIZ / "config" / "devices.yml"
-# o app de bandeja guarda uma cópia do token; sem atualizar aqui ele fica
-# tentando entrar com o antigo e o servidor recusa (4401)
-CFG_DESKTOP = Path.home() / "AppData" / "Roaming" / "jarvis-desktop" / "config.json"
+# O app de bandeja guarda uma cópia do token; sem atualizar aqui ele fica
+# tentando entrar com o antigo e o servidor recusa (4401).
+# A pasta vem do productName do Electron ("JARVIS"), não do nome do pacote —
+# apontar pra "jarvis-desktop" fazia a atualização falhar em silêncio.
+# O app também relê o devices.yml no start, então isto virou rede de segurança.
+APPDATA = Path.home() / "AppData" / "Roaming"
+CFGS_DESKTOP = [APPDATA / "JARVIS" / "config.json",
+                APPDATA / "jarvis-desktop" / "config.json"]
 
 LINHA_TOKEN = re.compile(r"^(\s*token:\s*)(\S+)\s*$", re.M)
 LINHA_DEVICE = re.compile(r"^  ([\w-]+):\s*$", re.M)
@@ -69,19 +74,25 @@ def main():
     DEVICES.write_text(saida, encoding="utf-8")
     print(f"\ndevices.yml atualizado (backup em {backup.name})")
 
-    if CFG_DESKTOP.is_file():
+    achou_app = False
+    for cfg_desktop in CFGS_DESKTOP:
+        if not cfg_desktop.is_file():
+            continue
+        achou_app = True
         try:
-            cfg = json.loads(CFG_DESKTOP.read_text(encoding="utf-8"))
+            cfg = json.loads(cfg_desktop.read_text(encoding="utf-8"))
             dev = cfg.get("device")
             if dev in novos:
-                shutil.copy2(CFG_DESKTOP, CFG_DESKTOP.with_suffix(f".json.bak-{carimbo}"))
+                shutil.copy2(cfg_desktop, cfg_desktop.with_suffix(f".json.bak-{carimbo}"))
                 cfg["token"] = novos[dev]
-                CFG_DESKTOP.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
-                print(f"app da bandeja atualizado ({dev})")
+                cfg_desktop.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+                print(f"app da bandeja atualizado ({dev} em {cfg_desktop.parent.name})")
             else:
                 print(f"app da bandeja usa o device {dev!r}, que não está no devices.yml")
         except Exception as e:
             print(f"não consegui atualizar o app da bandeja: {e}")
+    if not achou_app:
+        print("app da bandeja não instalado (ou nunca aberto) — nada a atualizar")
 
     print("\nAgora reinicie o servidor e o app da bandeja.")
     print("Nos celulares/relógio, informe o token novo na tela de configuração.")

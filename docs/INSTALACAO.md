@@ -69,8 +69,20 @@ um .exe pela metade. A primeira execução demora bem mais (baixa o Electron,
 instalador é `npm run dist` → `dist/JARVIS Setup <versão>.exe`
 (cópia em `releases/JARVIS-Desktop-Setup.exe`). Instala em
 `%LOCALAPPDATA%\Programs\jarvis-desktop\`, registra auto-start no logon e guarda a config em
-`%APPDATA%\jarvis-desktop\config.json` (host/device/token — o token é preenchido sozinho a
-partir do `devices.yml` se o projeto estiver em `~\Documents\GitHub\JARVIS`).
+`%APPDATA%\JARVIS\config.json` (host/device/token/projeto — a pasta usa o `productName`).
+
+**O app é o supervisor do JARVIS, não só a janela dele.** Ao abrir, ele confere as
+portas 11434 (Ollama), 8040 (servidor) e 8041 (voz) e sobe o que estiver faltando;
+depois repete a checagem a cada 30 s. Como ele entra sozinho na inicialização do
+Windows, ligar o PC (ou abrir o exe) liga o JARVIS inteiro. O menu da bandeja mostra
+o estado dos três e tem "Verificar agora".
+
+Para isso ele precisa saber onde está o repositório. A raiz é gravada no pacote
+(`build/projeto.json`, escrito pelo `sync-web`) e pode ser trocada pelo campo
+`projeto` do `config.json` ou pela variável `JARVIS_HOME`. **O token vem sempre do
+`devices.yml`** dessa raiz, a cada início — antes a cópia local só era preenchida
+quando estava vazia, então uma rotação de token deixava o app tentando entrar com o
+antigo e apanhando `4401` sem nenhuma pista do motivo.
 Uso: ícone fica oculto na bandeja; falar "Jarvis" abre a janela do reator.
 A janela é **arrastável por qualquer ponto vazio** (não tem barra de título) e
 **lembra onde você deixou** (posição em `config.json`, com checagem de monitor pra
@@ -116,9 +128,27 @@ Três camadas, nessa ordem:
 
 | Camada | O quê |
 |---|---|
+| Chave `Run` do usuário | abre o app da bandeja (`JARVIS.exe`), que **sobe Ollama, servidor e voz** e revisa a cada 30 s — é a camada que basta |
 | Tarefa **JARVIS Server** (ONLOGON) | roda `start_jarvis.bat`, que abre o servidor e o serviço de voz, cada um com loop de reinício |
-| Chave `Run` do usuário | abre o app da bandeja (`JARVIS.exe`) |
-| Tarefa **JARVIS Watchdog** (a cada 5 min) | confere os três e religa o que estiver fora; log em `server/data/watchdog.log` |
+| Tarefa **JARVIS Watchdog** (a cada 5 min) | confere os quatro e religa o que estiver fora; log em `server/data/watchdog.log` |
+
+As duas tarefas guardam **caminho absoluto**. Quando o projeto mudou de
+`~\Documents\GitHub\JARVIS` para `C:\GitHub\JARVIS`, as duas passaram a apontar pro
+vazio e pararam de funcionar em silêncio (a "JARVIS Server" só registrava resultado 1).
+Depois de mover o projeto, regrave-as:
+
+```
+powershell -ExecutionPolicy Bypass -File server\scripts\instalar_tarefas.ps1
+```
+
+Se elas já existirem criadas por outro contexto, o Windows exige **administrador**
+pra regravar — o script avisa e segue. Não é bloqueante: o app da bandeja sozinho já
+sobe e vigia tudo.
+
+> Armadilha: não crie essas tarefas com `schtasks /TR "...\arquivo.vbs"`. A barra
+> invertida antes da aspa final escapa a aspa, e o caminho engole o `/RL LIMITED`
+> virando um argumento só. Foi assim que as duas quebraram. O script usa
+> `Register-ScheduledTask`, que recebe o caminho como argumento.
 
 Os `.bat` definem `FOR_DISABLE_CONSOLE_CTRL_HANDLER=1`: sem isso a runtime Fortran
 que vem dentro do numpy/scipy **mata o processo** quando o console recebe evento de

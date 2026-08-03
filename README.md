@@ -29,7 +29,9 @@ O passo a passo completo do ambiente está em
 
 ## Como ligar
 
-O servidor liga sozinho com o Windows (tarefa "JARVIS Server"). Pra ligar na mão:
+Tudo liga sozinho com o Windows: o app da bandeja entra na inicialização e ele mesmo
+sobe o Ollama, o servidor e o serviço de voz (e revisa a cada 30 s). Abrir o
+`JARVIS.exe` na mão tem o mesmo efeito. Pra subir só o servidor, sem o app:
 
 ```
 server\start_jarvis.bat

@@ -18,6 +18,8 @@ server/data/jarvis.log
 server/data/voice.log
 server/data/watchdog.log
 apps/desktop/build/web/
+# gerado pelo sync-web: guarda a raiz do projeto NESTA maquina
+apps/desktop/build/projeto.json
 server/data/*.log.old
 tests/.cache/
 # ---------------------------------------------------------------------------

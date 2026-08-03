@@ -24,6 +24,28 @@ function NoAr($porta) {
     }
 }
 
+# --- Ollama (11434): o roteador e os agentes locais nao respondem sem ele ---
+# Quando o ollama morre, os llama-server filhos SOBREVIVEM segurando a VRAM.
+# Nesta placa (8 GB) um orfao de 1,1 GB ja deixa o TTS e o Whisper sem espaco.
+# Limpa antes de subir de novo, senao a cada reinicio sobra mais um.
+$orfaos = Get-CimInstance Win32_Process -Filter "Name='llama-server.exe'" | Where-Object {
+    -not (Get-Process -Id $_.ParentProcessId -ErrorAction SilentlyContinue)
+}
+foreach ($o in $orfaos) {
+    Escreve "llama-server orfao (pid $($o.ProcessId)) segurando VRAM; encerrando"
+    Stop-Process -Id $o.ProcessId -Force -ErrorAction SilentlyContinue
+}
+
+if (-not (Get-Process ollama)) {
+    $ollama = "$env:LOCALAPPDATA\Programs\Ollama\ollama.exe"
+    if (Test-Path $ollama) {
+        Escreve "ollama fora do ar; iniciando"
+        Start-Process $ollama -ArgumentList 'serve' -WindowStyle Hidden
+    } else {
+        Escreve "ollama nao encontrado em $ollama"
+    }
+}
+
 # --- servidor (8040): sobe junto com o servico de voz pelo start_jarvis.bat ---
 $servidorVivo = (Get-Process python | Where-Object { $_.Path -like "*envs\jarvis\*" }) -ne $null
 if (-not $servidorVivo) {

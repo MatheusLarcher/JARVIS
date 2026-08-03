@@ -13,3 +13,11 @@ if (!fs.existsSync(src)) {
 fs.rmSync(dst, { recursive: true, force: true })
 fs.cpSync(src, dst, { recursive: true })
 console.log(`interface copiada: ${src} -> ${dst}`)
+
+// Grava onde está o projeto. O app instalado fica em %LOCALAPPDATA%\Programs e
+// não tem como adivinhar o repositório — é daqui que ele lê o token e é isto que
+// ele usa pra subir o servidor. Sem este arquivo o exe vira só uma casca.
+const raiz = path.resolve(__dirname, '..', '..')
+fs.writeFileSync(path.join(__dirname, 'build', 'projeto.json'),
+                 JSON.stringify({ raiz }, null, 2))
+console.log(`projeto gravado no pacote: ${raiz}`)

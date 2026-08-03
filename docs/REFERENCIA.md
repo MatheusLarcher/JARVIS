@@ -162,6 +162,8 @@ O que ainda não existe está em [ROADMAP.md](ROADMAP.md).
 | `server/scripts/check_library.py` | Confere se a biblioteca está completa e íntegra. |
 | `server/scripts/prepare_voice_ref.py` | Prepara o áudio de referência da voz clonada. |
 | `server/scripts/trocar_tokens.py` | Roda tokens novos e atualiza a cópia guardada pelo app da bandeja. |
+| `server/scripts/instalar_tarefas.ps1` | Registra/conserta as tarefas "JARVIS Server" e "JARVIS Watchdog" com o caminho real do projeto. |
+| `server/watchdog.ps1` | Confere Ollama, servidor, voz e app da bandeja; sobe o que estiver fora. |
 | `docs/diagrama/gerar.py` | Regera o diagrama do sistema (`docs/diagrama.png`). |
 
 ---
