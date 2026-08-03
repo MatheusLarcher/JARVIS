@@ -44,8 +44,27 @@ APKs prontos ficam em `releases/Jarvis.apk` e `releases/Jarvis-Watch.apk`.
 
 ## Desktop (PC de bandeja)
 
+### Gerar o instalador
+
+```
+gerar_exe.bat            usa a versão que está no package.json
+gerar_exe.bat 0.2.0      grava essa versão antes de gerar
+```
+
+Dois cliques resolvem. O script faz a cadeia inteira: instala o que faltar
+(interface e app), builda a interface, copia ela pra dentro do app (`sync-web`)
+e roda o electron-builder. No fim deixa o arquivo pronto em
+`releases\JARVIS-Desktop-Setup.exe` (~78 MB) e diz o caminho na tela.
+
+Se der erro, ele para na hora e mostra qual etapa quebrou — não segue gerando
+um .exe pela metade. A primeira execução demora bem mais (baixa o Electron,
+~200 MB).
+
+### Detalhes
+
 `apps/desktop` (Electron). Dev: `npm install && npm start` (usa o token do
-`config/devices.yml` do repo). Instalador: `npm run dist` → `dist/JARVIS Setup 0.1.0.exe`
+`config/devices.yml` do repo). Por baixo do `gerar_exe.bat`, o passo do
+instalador é `npm run dist` → `dist/JARVIS Setup <versão>.exe`
 (cópia em `releases/JARVIS-Desktop-Setup.exe`). Instala em
 `%LOCALAPPDATA%\Programs\jarvis-desktop\`, registra auto-start no logon e guarda a config em
 `%APPDATA%\jarvis-desktop\config.json` (host/device/token — o token é preenchido sozinho a

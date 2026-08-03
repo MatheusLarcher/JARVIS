@@ -20,7 +20,12 @@
     "appId": "com.larchertech.jarvis",
     "productName": "JARVIS",
     "icon": "build/icon.ico",
-    "files": ["main.js", "preload.js", "sync-web.js", "build/**"],
+    "files": [
+      "main.js",
+      "preload.js",
+      "sync-web.js",
+      "build/**"
+    ],
     "win": {
       "target": "nsis",
       "icon": "build/icon.ico"
