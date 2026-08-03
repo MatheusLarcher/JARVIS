@@ -15,14 +15,21 @@ releases/
 apps/desktop/node_modules/
 apps/desktop/dist/
 server/data/jarvis.log
-server/data/voice/
 server/data/voice.log
 server/data/watchdog.log
 apps/desktop/build/web/
 server/data/*.log.old
 tests/.cache/
-# gravacoes das suas falas (registro): ficam so na maquina
+# ---------------------------------------------------------------------------
+# AUDIO — o que pode e o que nao pode ir pro repositorio publico
+#
+#  VAI:      server/data/voice/jarvis_ref.wav  (a voz do JARVIS, referencia do
+#            clone — quem clonar o repo regera a biblioteca com ela)
+#  NAO VAI:  a voz do Matheus (gravacoes dos pedidos) e o JARVIS respondendo
+#            (biblioteca e cache do TTS) — audio de uso, fica so na maquina
+# ---------------------------------------------------------------------------
 server/data/gravacoes/
+server/data/library/
 
 # credenciais dos aparelhos (use o devices.example.yml como modelo)
 config/devices.yml
