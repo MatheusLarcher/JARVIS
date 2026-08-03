@@ -7,6 +7,26 @@ Tudo é processado no seu notebook, sem mandar áudio pra internet.
 Também funciona em duas etapas: diga só **"Jarvis"**, ele responde "Sim?" e aí você
 manda o comando. No celular e no relógio dá pra tocar no reator em vez de chamar.
 
+## Primeira vez (quem acabou de clonar)
+
+Duas configurações não vêm no repositório porque guardam credenciais. Copie os
+modelos e preencha:
+
+```
+copy config\devices.example.yml config\devices.yml
+copy config\.env.example config\.env
+```
+
+No `devices.yml`, gere um token por aparelho:
+
+```
+python -c "import secrets; print('tk_' + secrets.token_urlsafe(24))"
+```
+
+O `.env` pode ficar vazio — sem chave nenhuma o JARVIS roda 100% local.
+O passo a passo completo do ambiente está em
+[docs/INSTALACAO.md](docs/INSTALACAO.md).
+
 ## Como ligar
 
 O servidor liga sozinho com o Windows (tarefa "JARVIS Server"). Pra ligar na mão:
@@ -59,6 +79,17 @@ Um desenho de como tudo se encaixa, com os tempos medidos:
 
 ![Como o JARVIS funciona](docs/diagrama.png)
 
-O resto está em [`docs/`](docs/): arquitetura, APIs, como adicionar skills, dispositivos,
-trocar STT/TTS/LLM e a memória do projeto. Os agentes, o registro das interações e o
-observador estão em [docs/AGENTES.md](docs/AGENTES.md).
+Por onde começar, conforme o que você quer:
+
+| Quero… | Leia |
+|---|---|
+| entender como funciona | [ARQUITETURA.md](docs/ARQUITETURA.md) |
+| saber o que existe (cada módulo, config, teste) | [REFERENCIA.md](docs/REFERENCIA.md) |
+| entender a decisão e os agentes | [AGENTES.md](docs/AGENTES.md) |
+| instalar / gerar os apps | [INSTALACAO.md](docs/INSTALACAO.md) |
+| mexer no código (skill, aparelho, modelo) | [GUIAS.md](docs/GUIAS.md) |
+| ver os tempos medidos | [DESEMPENHO.md](docs/DESEMPENHO.md) · [STT.md](docs/STT.md) · [VOZ.md](docs/VOZ.md) |
+| integrar com o servidor | [API.md](docs/API.md) |
+| saber o que falta | [ROADMAP.md](docs/ROADMAP.md) |
+| contribuir sem vazar credencial | [SEGURANCA.md](docs/SEGURANCA.md) |
+| o histórico do projeto, com os erros | [MEMORIA.md](docs/MEMORIA.md) |
