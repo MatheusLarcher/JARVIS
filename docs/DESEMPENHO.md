@@ -105,6 +105,40 @@ longa. Não atrapalha a sensação de rapidez (o áudio começa em 6,5s e vai
 saindo em pedaços), mas se quiser cortar isso pela metade, o caminho é limitar
 o tamanho da resposta do modelo.
 
+### O piso de ~850 ms por chamada ao Ollama (medido em 03/08/2026)
+
+Do fim da sua fala até a primeira palavra da resposta, pela telemetria do
+servidor (`metrics_json` na tabela `interactions`):
+
+| Etapa | Custo |
+|---|---|
+| Roteador (modelo pequeno decide o agente) | ~1,06 s |
+| Agente, 1º token | ~1,05–1,42 s |
+| TTS, 1º áudio (voz clonada) | ~1,7–1,95 s |
+
+Quase todo o custo das duas primeiras é **um piso fixo de ~850 ms por chamada
+que não é geração**. Medido pelo `load_duration` da própria API do Ollama:
+850 ms de "load" contra 25 ms de `prompt_eval` e 25 ms de `eval`, com o modelo
+residente (`ollama ps` confirma, 100% GPU). Descartados: VRAM (o piso continua
+com a placa em 6 de 8 GB), clock (2782 MHz), `keep_alive=30m` e os parâmetros
+da requisição — o piso aparece até na requisição mais simples possível.
+
+**Mas ele paraleliza.** Duas chamadas simultâneas terminam juntas em ~1,0 s; as
+mesmas duas em sequência custam 1,88 s. Como o desenho é estritamente serial
+(roteador → *depois* agente), o piso é pago **duas vezes** e ~850 ms disso é
+desperdício. Sobrepor as duas é o maior ganho de latência disponível hoje —
+ver o item no [ROADMAP.md](ROADMAP.md).
+
+Antes/depois dos consertos de 03/08 (mesmas frases, mesmo caminho):
+
+| Frase | Antes | Depois |
+|---|---|---|
+| "lida a luz da sala" → agente `casa` | 12,6 s | 6,3 s |
+| "quem foi Santos Dumont" → `conversa` | 16,3 s | 6,5 s |
+
+O ganho não veio de otimização: veio de parar de gerar o que era descartado e
+de tirar o histórico velho do prompt (ver MEMORIA.md).
+
 ## Como repetir os testes
 
 ```

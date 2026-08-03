@@ -136,6 +136,13 @@ def interpretar(texto: str, agentes: list[dict]) -> Decisao:
         escolhido = m.group(1).strip().lower()
         if escolhido in nomes:
             return Decisao(agente=escolhido, motivo="escolha explícita", bruto=bruto)
+        # O modelo escreve o nome ACENTUADO ("avançado") e a config usa "avancado":
+        # nunca casava, caía sempre no aproximado e marcava confiança baixa — o que
+        # ainda acordava o observador à toa, disputando a mesma GPU.
+        sem_acento = {normalize(n): n for n in nomes}
+        if normalize(escolhido) in sem_acento:
+            return Decisao(agente=sem_acento[normalize(escolhido)],
+                           motivo="escolha explícita", bruto=bruto)
         # falou um nome que não existe: aproveita se for parecido com algum
         for nome in nomes:
             if nome.startswith(escolhido[:4]) or escolhido.startswith(nome[:4]):
@@ -175,7 +182,15 @@ async def decidir(transcricao: str) -> tuple[Decisao, float]:
     cfg = config.settings["llm"]
     modelo = config.settings.get("agentes", {}).get("roteador", {}).get(
         "modelo") or cfg["model"]
-    extras = {**_extras_llm(cfg), "max_tokens": 40}
+    # A decisão cabe na PRIMEIRA linha. Sem o stop, o modelo despejava mais ~35
+    # tokens de invenção depois dela ("AGENTE: conversa\nSanto Dumont (1965-2013),
+    # conhecido como Dino, era um compositor...") — tudo jogado fora, mas gerado
+    # dentro do tempo de resposta.
+    # temperature=0: escolher agente é CLASSIFICAÇÃO, não criatividade. Com a
+    # temperatura padrão do modelo a mesma frase caía em agentes diferentes a
+    # cada tentativa ("põe um alarme" ora em sistema, ora em conversa) — o que
+    # também tornava qualquer medição de acerto do roteador sem sentido.
+    extras = {**_extras_llm(cfg), "max_tokens": 16, "stop": ["\n"], "temperature": 0}
 
     t0 = time.perf_counter()
     try:

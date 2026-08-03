@@ -136,11 +136,21 @@ class Store:
         alvo = transcricao.lower().strip()
         return any(a.lower().strip() == alvo for a in anteriores)
 
-    async def recent_history(self, device_id: str, limit: int = 6) -> list[dict]:
-        """Memória curta: últimas trocas do dispositivo pro contexto do agente."""
+    async def recent_history(self, device_id: str, limit: int = 6,
+                             max_idade_s: float = 600) -> list[dict]:
+        """Memória curta: últimas trocas do dispositivo pro contexto do agente.
+
+        **Precisa da janela de tempo.** Sem ela, a consulta pegava as últimas N
+        trocas do device por mais VELHAS que fossem, e elas entravam no prompt
+        como "conversa anterior". Efeito real medido: perguntado "quem foi Santos
+        Dumont", o agente respondeu falando de "jantar" e "dispositivo web" —
+        assunto de uma conversa de 10 HORAS antes. Fora o custo: histórico à toa
+        atrasa a primeira palavra do modelo pequeno.
+        """
         cur = await self._db.execute(
             "SELECT transcript, response_text FROM interactions WHERE device_id=? "
-            "AND transcript IS NOT NULL ORDER BY id DESC LIMIT ?", (device_id, limit))
+            "AND transcript IS NOT NULL AND ts >= ? ORDER BY id DESC LIMIT ?",
+            (device_id, time.time() - max_idade_s, limit))
         rows = await cur.fetchall()
         return [{"user": r[0], "jarvis": r[1]} for r in reversed(rows)]
 

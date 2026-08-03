@@ -8,6 +8,7 @@ por tests/test_audio_e2e.py com wav sintético.
 import asyncio
 import json
 import sys
+from pathlib import Path
 
 import websockets
 

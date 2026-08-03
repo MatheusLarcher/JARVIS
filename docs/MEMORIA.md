@@ -10,9 +10,10 @@ wake "Hey Jarvis" → ack local → "liga a luz da sala" → Nemotron transcreve
 
 - **Ambiente:** conda env `jarvis` (Py 3.11), torch 2.11+cu128 (RTX 5050 ok), NeMo do git main
   (o do pip 2.7.3 NÃO carrega o modelo — falta `rnnt_bpe_models_prompt`).
-- **Servidor:** porta 8040, auto-start via tarefa "JARVIS Server" (ONLOGON,
-  `server/start_jarvis_hidden.vbs` → `start_jarvis.bat` com loop watchdog, log em
-  `server/data/jarvis.log`).
+- **Servidor:** porta 8040, log em `server/data/jarvis.log`. Quem sobe é o app da
+  bandeja (supervisor: Ollama 11434, servidor 8040, voz 8041, revisão a cada 30s);
+  a tarefa "JARVIS Server" (ONLOGON → `start_jarvis_hidden.vbs` → `start_jarvis.bat`
+  com loop) é redundância. Ver "Mover o projeto quebrou o auto-start inteiro".
 - **Web:** buildada em `apps/web/dist`, servida na raiz do 8040. Validada no browser.
 - **Android:** `apps/android` (`:app` tablet+celular, `:wear` relógio; código comum em
   `apps/android/shared/java`). Release assinado em `releases/Jarvis.apk` e
@@ -109,7 +110,8 @@ Infra de diagnóstico criada (usar SEMPRE antes de chutar):
 - `tests/diag_microfones.py` — mede todos os mics tocando som pelo alto-falante.
 - `tests/test_mic_real.py` — E2E acústico REAL (toca no alto-falante via CDP+setSinkId,
   confere em `/api/metrics/recent`). Resultado: ouviu "liga a luz da sala", 2,3s.
-- Tarefa **JARVIS Watchdog** (5 em 5 min) religa servidor/voz/app que estiverem fora.
+- Tarefa **JARVIS Watchdog** (5 em 5 min) religa Ollama/servidor/voz/app que estiverem
+  fora. O app da bandeja faz a mesma checagem a cada 30s, então é rede de segurança.
 
 Armadilha de teste: `Get-Process JARVIS` NÃO pega o app em dev (lá o processo chama
 `electron.exe`) — matar só o JARVIS.exe deixa a instância antiga viva e o
@@ -327,6 +329,107 @@ Notas práticas:
 - A favor dele, e que continua valendo: **transducer não alucina em silêncio** como o
   Whisper (que já criou pedido fantasma repetindo o próprio prompt).
 
+## Mover o projeto quebrou o auto-start inteiro (2026-08-03)
+
+O projeto saiu de `~\Documents\GitHub\JARVIS` e foi pra `C:\GitHub\JARVIS`. Nada avisou.
+Quatro coisas guardavam esse caminho por extenso e passaram a apontar pro vazio:
+
+1. Tarefa **JARVIS Server** — última execução em 01/08 com resultado 1; desde então o
+   servidor nunca mais subiu no logon.
+2. Tarefa **JARVIS Watchdog** — mesma coisa, então a rede de segurança também caiu.
+3. Fallback do token no `main.js` do app da bandeja.
+4. `trocar_tokens.py`, que ainda por cima escrevia em `%APPDATA%\jarvis-desktop\` quando
+   o Electron usa `%APPDATA%\JARVIS\` (a pasta vem do `productName`).
+
+O 4 é o pior porque **falhava em silêncio**: a rotação de tokens de 02/08 não chegou no
+app, ele continuou tentando entrar com o token velho e o servidor recusava com `4401`
+(`conexão recusada: pc-matheus` no log). Pra quem estava na frente do PC, o JARVIS
+simplesmente não respondia.
+
+As duas tarefas foram criadas com `schtasks /TR "...\arquivo.vbs"`. **A barra invertida
+antes da aspa final escapa a aspa**: o caminho e o `/RL LIMITED` viraram um argumento só
+(`wscript.exe " C:\...\start_jarvis_hidden.vbs\ /RL LIMITED`). Usar
+`Register-ScheduledTask`, que recebe o caminho como argumento, não tem esse problema.
+
+**O que mudou.** O app da bandeja virou o **supervisor**: ele já entrava na chave `Run`
+do Windows, e agora confere as portas 11434/8040/8041 no start e a cada 30 s, subindo o
+que faltar (`garanteServicos` no `main.js`). Ninguém subia o Ollama antes — nem o
+watchdog. A raiz do projeto é gravada no pacote pelo `sync-web` (`build/projeto.json`) e
+o token passa a vir **sempre** do `devices.yml` dessa raiz, não só quando a cópia local
+está vazia. Resultado: abrir o exe liga o JARVIS inteiro.
+
+Armadilhas encontradas ao consertar:
+- `.ps1` **sem BOM é lido como ANSI** pelo Windows PowerShell 5.1 — um "não" acentuado
+  no script vira erro de parser. Por isso `watchdog.ps1` e `instalar_tarefas.ps1` são
+  ASCII puro.
+- `-RepetitionDuration ([TimeSpan]::MaxValue)` gera `P99999999DT23H59M59S`, que o
+  agendador recusa ("valor fora do intervalo"). Omitir o parâmetro = repetição indefinida.
+- Regravar tarefa que já existe criada por outro contexto exige **administrador**; criar
+  tarefa nova, não. As duas antigas continuam lá, quebradas, até rodar
+  `instalar_tarefas.ps1` elevado — o que não bloqueia nada, porque o app cobre.
+- Filtrar processos por `CommandLine -like "*start_jarvis*"` pega **o próprio PowerShell**
+  que roda o filtro (a string está na linha de comando dele). Excluir `$PID`.
+
+## Caça a bugs no caminho do pedido (2026-08-03)
+
+Varredura do fluxo inteiro com o sistema no ar, medindo cada etapa pela telemetria.
+
+**1. Histórico velho envenenava o prompt** (`memory/db.py::recent_history`). A consulta
+pegava as últimas N trocas do device **sem filtro de tempo**. Perguntado "quem foi Santos
+Dumont", o agente `conversa` respondeu falando de *"jantar"* e *"dispositivo web"* —
+assunto de uma conversa de **10 horas antes**, injetada como "[conversa anterior]".
+Corrigido com janela de tempo (`llm.historico_max_idade_min`, 10 min). Depois do
+conserto a mesma pergunta responde `"Não sei."`, que é o comportamento honesto que o
+prompt pede. Também economiza tokens, que é latência.
+
+**2. O roteador rodava com temperatura padrão (~0.8).** Escolher agente é
+CLASSIFICAÇÃO, não criatividade: a mesma frase caía em agentes diferentes a cada
+tentativa ("põe um alarme" ora `sistema`, ora `conversa`). Isso ainda tornava qualquer
+medição de acerto do roteador sem sentido — o `bench_roteador` variava por acaso.
+`temperature: 0` deixou as 4 frases de teste 100% estáveis em 5 repetições.
+
+**3. Nome de agente acentuado nunca casava.** O modelo escreve `AGENTE: avançado` e a
+config chama `avancado`: caía sempre no casamento aproximado, marcava confiança baixa e
+com isso **acordava o observador à toa** — outra chamada de LLM disputando a mesma GPU.
+Corrigido comparando sem acento.
+
+**4. O roteador gerava ~35 tokens de lixo depois da decisão.** A resposta útil é a
+primeira linha; o resto era invenção jogada fora (`'AGENTE: conversa\nSanto Dumont
+(1965-2013), conhecido como "Dino", era um compositor...'`). Resolvido com
+`stop=["\n"]` e `max_tokens=16`.
+
+**5. `ask_stream` não filtrava o ramo da resposta final** (`agents/agent.py`). O
+`_FiltroPensamento` e o `_CortaResposta` só rodavam no ramo `partial`. Quando o evento
+chega sem parcial — acontece depois de chamada de ferramenta — o texto ia CRU pra voz:
+`<think>` falado em voz alta e limite de tamanho ignorado.
+
+**6. `llama-server` órfão segurando VRAM.** Quando o `ollama.exe` morre, os
+`llama-server.exe` filhos **sobrevivem**. Nesta placa de 8 GB um órfão de 1,1 GB deixou
+a VRAM em 7463/8151 MiB. Como o watchdog reergue o ollama sempre que a porta cai, cada
+reinício deixava mais um. O watchdog agora mata os órfãos (pai morto) antes de subir.
+
+**7. `tests/test_ws_flow.py` e `test_tts_stream.py` quebravam na primeira linha** —
+`Path` usado sem `from pathlib import Path`, desde o commit 5d0d12c (auditoria de
+segurança). O `test_ws_flow.py` é um dos três testes que o INSTALACAO.md manda rodar.
+
+### Onde o tempo vai, medido (fim da fala → primeira palavra da resposta)
+
+| Etapa | Custo |
+|---|---|
+| Roteador (modelo pequeno) | ~1,06 s |
+| Agente, 1º token | ~1,05–1,42 s |
+| TTS, 1º áudio (voz clonada) | ~1,7–1,95 s |
+
+**Toda chamada ao Ollama tem um piso de ~850 ms** que não é geração: medido pelo
+`load_duration` da própria API, com o modelo residente (`ollama ps` confirma), contra
+prompt_eval de 25 ms e eval de 25 ms. Não é VRAM (some com a placa em 6 GB/8 GB), não é
+clock (2782 MHz), não muda com `keep_alive=30m` nem com os parâmetros da requisição.
+
+**Mas ele paraleliza:** duas chamadas simultâneas terminam juntas em ~1,0 s; em
+sequência custam 1,88 s. Como o desenho hoje é estritamente serial
+(roteador → depois agente), o piso é pago **duas vezes**. Sobrepor as duas é o maior
+ganho de latência disponível — e ainda não foi feito.
+
 ## Decisões e aprendizados importantes
 
 - **Wake word e VAD são STATEFUL → uma instância POR CONEXÃO** (`AudioPipeline.init()`).
@@ -353,6 +456,9 @@ Notas práticas:
 ## Pendências / próximos passos
 
 - [ ] Conectar Home Assistant REAL (falta URL + token do Matheus; modo mock ativo).
+- [ ] Regravar a tarefa **JARVIS Server** num PowerShell **como administrador**
+      (`server\scripts\instalar_tarefas.ps1`). Ela ainda aponta pro caminho antigo e
+      falha em silêncio. Não é urgente: o app da bandeja e o Watchdog já sobem tudo.
 - [ ] Testar o wake com a voz real do Matheus e calibrar (`fuzzy_max_edits`,
       `vad.min_speech_ms`). Observado no log: o app da bandeja com mic real chegou a
       registrar um "chamou: 'Jarvis.'" sem ninguém falar — se acontecer muito, subir

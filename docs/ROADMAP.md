@@ -77,6 +77,26 @@ Hoje ele só sabe dizer que não sabe: não abre programa, não mexe no volume, 
 lê o que está na tela. É o agente mais fácil de tornar útil, porque tudo roda na
 mesma máquina.
 
+### 7b. Sobrepor o roteador e o agente — o maior ganho de latência
+
+Toda chamada ao Ollama custa **~850 ms que não são geração** (medido pelo
+`load_duration`, com o modelo residente — ver [DESEMPENHO.md](DESEMPENHO.md)).
+Como o desenho é serial (roteador → depois agente), esse piso é pago **duas
+vezes** por pedido. Duas chamadas em paralelo terminam juntas em ~1,0 s; em
+sequência custam 1,88 s.
+
+Dois caminhos, e a escolha muda o desenho:
+
+- **Especulativo**: dispara `palpite_por_palavras` (0 ms, sem LLM) em paralelo
+  com o roteador e já começa a gerar pelo agente palpitado. Se o roteador
+  confirmar, ganha ~1 s; se discordar, descarta. **Risco:** pode começar a
+  falar pelo agente errado.
+- **Fundir** roteador e agente numa chamada só. Mais simples e mais rápido, mas
+  perde a separação que hoje impede o modelo de 0.8b de inventar fato —
+  exatamente o motivo de ele existir (ver [AGENTES.md](AGENTES.md)).
+
+Não fiz nenhum dos dois porque é decisão de arquitetura, não conserto.
+
 ### 8. Resposta melhor
 
 O `qwen3.5:0.8b` é fraco — perguntado sobre Santos Dumont, ele fala de "um

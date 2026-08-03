@@ -88,6 +88,9 @@ llm:
   # (medido: 0,4s -> 2,4s). Cada troca antiga entra truncada.
   historico_trocas: 2
   historico_max_chars: 160
+  # so conta como "conversa anterior" o que foi dito ha pouco. Sem este limite
+  # a troca de 10h atras entrava no prompt e o agente respondia o assunto errado
+  historico_max_idade_min: 10
   # resposta curta = menos tempo de sintese de voz (1 frase cabe em ~60 tokens)
   max_tokens: 60
   # corte garantido no servidor: modelo pequeno nao obedece "responda em uma

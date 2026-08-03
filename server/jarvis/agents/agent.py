@@ -267,8 +267,11 @@ async def _montar_prompt(transcript: str, ctx: DeviceContext) -> str:
     cfg = config.settings["llm"]
     trocas = int(cfg.get("historico_trocas", 2))
     limite = int(cfg.get("historico_max_chars", 160))
+    # conversa de horas atrás não é contexto, é ruído — ver db.recent_history
+    idade = float(cfg.get("historico_max_idade_min", 10)) * 60
 
-    history = await store.recent_history(ctx.device_id, limit=trocas) if trocas else []
+    history = (await store.recent_history(ctx.device_id, limit=trocas,
+                                          max_idade_s=idade)) if trocas else []
     linhas = []
     for h in history:
         if not h["jarvis"]:
@@ -342,12 +345,21 @@ async def ask_stream(transcript: str, ctx: DeviceContext, agente: str | None = N
                 # sem strip, pra não comer espaços e colar palavras)
                 if texto.startswith(enviado):
                     resto = texto[len(enviado):]
-                    if resto:
-                        enviado += resto
-                        yield resto
                 elif not enviado:
-                    enviado = texto
-                    yield texto
+                    resto = texto
+                else:
+                    resto = ""
+                if resto:
+                    enviado += resto
+                    # PRECISA passar pelo filtro e pelo corte também aqui. Quando
+                    # o evento chega sem parcial (acontece depois de chamada de
+                    # ferramenta), este ramo entregava o texto CRU: o <think> ia
+                    # parar na voz e o limite de tamanho não valia.
+                    limpo = corte.feed(filtro.feed(resto))
+                    if limpo:
+                        yield limpo
+                    if corte.encerrado:
+                        return
     except Exception:
         log.exception("agente falhou")
     finally:
