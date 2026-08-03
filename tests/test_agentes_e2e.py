@@ -20,11 +20,13 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from conexao import ws_url  # noqa: E402
 from test_audio_e2e import Session, silence, stream, tts_pcm  # noqa: E402
 
 import websockets  # noqa: E402
 
-URL = "ws://127.0.0.1:8040/ws/web-dev?token=tk_web_3Za5Xb7Vc9Td1Rf4Pg6Nh8Lj2"
+URL = ws_url()
 DATA = Path(__file__).resolve().parents[1] / "server" / "data"
 DB = DATA / "jarvis.db"
 

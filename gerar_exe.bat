@@ -131,6 +131,10 @@ echo   E so dar dois cliques nele pra instalar.
 echo   O app entra sozinho na inicializacao do Windows.
 echo  =========================================
 echo.
+
+rem abre a pasta ja com o instalador selecionado
+explorer /select,"%FINAL%"
+
 pause
 exit /b 0
 

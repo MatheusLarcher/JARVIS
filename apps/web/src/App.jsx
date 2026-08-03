@@ -8,7 +8,9 @@ const params = new URLSearchParams(location.search)
 const CFG = window.jarvisDesktop?.config || {}
 const DESKTOP = CFG.desktop === true || params.get('desktop') === '1'
 const DEVICE_ID = CFG.device || params.get('device') || localStorage.getItem('jarvis_device') || 'web-dev'
-const TOKEN = CFG.token || params.get('token') || localStorage.getItem('jarvis_token') || 'tk_web_3Za5Xb7Vc9Td1Rf4Pg6Nh8Lj2'
+// sem token embutido: ele é credencial. Vem da config do desktop, da query
+// (?token=...) ou do que ficou salvo no navegador.
+const TOKEN = CFG.token || params.get('token') || localStorage.getItem('jarvis_token') || ''
 // servidor: no navegador é a própria origem; no desktop vem da config
 const SERVER = CFG.host || location.host
 const HTTP = `http://${SERVER}`

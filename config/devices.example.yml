@@ -1,0 +1,28 @@
+# MODELO. Copie para `devices.yml` e gere os SEUS tokens:
+#     python -c "import secrets; print('tk_' + secrets.token_urlsafe(24))"
+#
+# O devices.yml de verdade NÃO vai pro git (está no .gitignore): ele guarda as
+# credenciais que autenticam cada aparelho no servidor.
+#
+# O token vai na query do WebSocket: /ws/{device_id}?token=...
+devices:
+  tablet-sala:
+    type: tablet
+    token: COLOQUE_UM_TOKEN_AQUI
+    default_room: sala
+  celular-matheus:
+    type: phone
+    token: COLOQUE_UM_TOKEN_AQUI
+    default_room: null
+  galaxy-watch:
+    type: watch
+    token: COLOQUE_UM_TOKEN_AQUI
+    default_room: null
+  pc-matheus:
+    type: pc
+    token: COLOQUE_UM_TOKEN_AQUI
+    default_room: escritorio
+  web-dev:
+    type: web
+    token: COLOQUE_UM_TOKEN_AQUI
+    default_room: escritorio

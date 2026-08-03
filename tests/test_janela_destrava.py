@@ -24,12 +24,12 @@ import numpy as np
 import websockets
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from conexao import ws_url  # noqa: E402
 from test_audio_e2e import Session, silence, stream, tts_pcm  # noqa: E402
 
 CDP = "http://127.0.0.1:9333"
-WS = "ws://127.0.0.1:8040/ws/web-dev?token=tk_web_3Za5Xb7Vc9Td1Rf4Pg6Nh8Lj2"
-
-
+WS = ws_url()
 async def _cdp():
     async with httpx.AsyncClient() as c:
         alvos = (await c.get(f"{CDP}/json")).json()

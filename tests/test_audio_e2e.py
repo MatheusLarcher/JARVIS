@@ -17,7 +17,10 @@ from pathlib import Path
 import numpy as np
 import websockets
 
-URL = "ws://127.0.0.1:8040/ws/web-dev?token=tk_web_3Za5Xb7Vc9Td1Rf4Pg6Nh8Lj2"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from conexao import ws_url  # noqa: E402
+
+URL = ws_url()
 SR = 16000
 FRAME = 1280  # 80ms
 CACHE = Path(__file__).parent / ".cache"

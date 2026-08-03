@@ -16,7 +16,8 @@ wake "Hey Jarvis" → ack local → "liga a luz da sala" → Nemotron transcreve
 - **Web:** buildada em `apps/web/dist`, servida na raiz do 8040. Validada no browser.
 - **Android:** `apps/android` (`:app` tablet+celular, `:wear` relógio; código comum em
   `apps/android/shared/java`). Release assinado em `releases/Jarvis.apk` e
-  `releases/Jarvis-Watch.apk` (keystore `jarvis-release.keystore`, senha `jarvis2026`).
+  `releases/Jarvis-Watch.apk` (keystore `jarvis-release.keystore`; a senha fica fora do
+  repositório — ver INSTALACAO.md).
   App validado no emulador (setup → conexão → ambient → tap-to-talk → estados → reconexão).
 - **LLM:** DeepSeek via ADK+LiteLlm funcionando (chave em `config/.env`), com tool de luz.
 - **Desktop (bandeja):** `apps/desktop` (Electron). Tray oculto + mic em background; a janela

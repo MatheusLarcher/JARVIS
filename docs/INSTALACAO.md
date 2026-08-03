@@ -33,7 +33,9 @@ Dev: `npm run dev` (proxy pro 8040).
 ## Android / Wear
 
 Projeto Gradle em `apps/android` (módulos `:app` e `:wear`).
-Build release assinado (keystore `apps/android/jarvis-release.keystore`, senha `jarvis2026`):
+Build release assinado. O keystore (`apps/android/jarvis-release.keystore`) e a senha
+**não** vão pro repositório — a senha fica em `config/.env` como `KEYSTORE_PASSWORD`
+ou você digita na hora. Sem eles dá pra gerar um debug normalmente.
 
 ```
 cd apps\android

@@ -14,8 +14,11 @@ from pathlib import Path
 import httpx
 import websockets
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from conexao import ws_url  # noqa: E402
+
 ROOT = Path(__file__).resolve().parents[1]
-URL = "ws://127.0.0.1:8040/ws/web-dev?token=tk_web_3Za5Xb7Vc9Td1Rf4Pg6Nh8Lj2"
+URL = ws_url()
 SERVER = "http://127.0.0.1:8040"
 
 

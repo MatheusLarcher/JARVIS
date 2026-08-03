@@ -16,7 +16,10 @@ from pathlib import Path
 
 import websockets
 
-WS = "ws://127.0.0.1:8040/ws/web-dev?token=tk_web_3Za5Xb7Vc9Td1Rf4Pg6Nh8Lj2"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from conexao import ws_url  # noqa: E402
+
+WS = ws_url()
 DB = Path(__file__).resolve().parents[1] / "server" / "data" / "jarvis.db"
 
 # frases coladas nos exemplos do agente `avancado` (settings.yml) pra ele ser

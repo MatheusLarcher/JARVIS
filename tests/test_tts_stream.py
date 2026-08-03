@@ -14,7 +14,10 @@ import time
 
 import websockets
 
-URL = "ws://127.0.0.1:8040/ws/web-dev?token=tk_web_3Za5Xb7Vc9Td1Rf4Pg6Nh8Lj2"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from conexao import ws_url  # noqa: E402
+
+URL = ws_url()
 PERGUNTA = sys.argv[1] if len(sys.argv) > 1 else \
     "me explica em duas frases o que e um buraco negro"
 

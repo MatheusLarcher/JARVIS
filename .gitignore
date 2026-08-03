@@ -23,3 +23,7 @@ server/data/*.log.old
 tests/.cache/
 # gravacoes das suas falas (registro): ficam so na maquina
 server/data/gravacoes/
+
+# credenciais dos aparelhos (use o devices.example.yml como modelo)
+config/devices.yml
+config/devices.yml.bak-*
