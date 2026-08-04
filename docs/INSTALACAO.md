@@ -13,8 +13,8 @@
 - Segredos em `config/.env` (gitignorado): `DEEPSEEK_API_KEY`, `HA_TOKEN`.
 - Gerar/atualizar a biblioteca de áudios: `python server/scripts/build_library.py`.
 - Rodar: `server\start_jarvis.bat` (loop watchdog) ou `python server/run.py`.
-- Auto-start: tarefa agendada **"JARVIS Server"** (ONLOGON, roda `start_jarvis_hidden.vbs`).
-  Log em `server/data/jarvis.log`.
+- Auto-start: opção **"Iniciar com o Windows"** na engrenagem do app (o app sobe o
+  resto). Log em `server/data/jarvis.log`.
 
 ## Portas
 
@@ -124,26 +124,25 @@ Ordem de checagem (do mais comum pro mais raro):
 
 ## Se não subir sozinho ao ligar o PC
 
-Três camadas, nessa ordem:
+**Uma camada só, e quem liga é você:** a opção **"Iniciar com o Windows"**, na
+engrenagem da janela (o menu da bandeja tem a mesma). Marcada, ela registra o app
+no login do Windows; o app abre junto com o PC e **sobe Ollama, servidor e voz**,
+revisando a cada 30 s. Desmarcada, nada do JARVIS entra no boot.
 
-| Camada | O quê |
-|---|---|
-| Chave `Run` do usuário | abre o app da bandeja (`JARVIS.exe`), que **sobe Ollama, servidor e voz** e revisa a cada 30 s — é a camada que basta |
-| Tarefa **JARVIS Server** (ONLOGON) | roda `start_jarvis.bat`, que abre o servidor e o serviço de voz, cada um com loop de reinício |
-| Tarefa **JARVIS Watchdog** (a cada 5 min) | confere os quatro e religa o que estiver fora; log em `server/data/watchdog.log` |
+A escolha fica em `iniciarComWindows`, no `config.json` do app, e é aplicada com
+`app.setLoginItemSettings`. Nem o instalador nem o app ligam isso por conta
+própria.
 
-As duas tarefas guardam **caminho absoluto**. Quando o projeto mudou de
-`~\Documents\GitHub\JARVIS` para `C:\GitHub\JARVIS`, as duas passaram a apontar pro
-vazio e pararam de funcionar em silêncio (a "JARVIS Server" só registrava resultado 1).
-Depois de mover o projeto, regrave-as:
+> **Antes eram quatro mecanismos ao mesmo tempo** — as tarefas agendadas "JARVIS
+> Server" e "JARVIS Watchdog", a chave `Run` e um atalho na pasta Inicializar. As
+> tarefas guardavam **caminho absoluto**: quando o projeto saiu de
+> `~\Documents\GitHub\JARVIS`, a "JARVIS Server" passou a chamar um `.vbs` que não
+> existia e o `wscript` abria uma **caixa de erro em todo boot**. Pior, o app
+> regravava `openAtLogin: true` a cada início, então desmarcar não colava.
+> Tudo isso foi removido em 04/08/2026 e trocado por esta opção única.
 
-```
-powershell -ExecutionPolicy Bypass -File server\scripts\instalar_tarefas.ps1
-```
-
-Se elas já existirem criadas por outro contexto, o Windows exige **administrador**
-pra regravar — o script avisa e segue. Não é bloqueante: o app da bandeja sozinho já
-sobe e vigia tudo.
+O `server/watchdog.ps1` continua no repositório, mas **nada o agenda**: virou
+ferramenta manual, para reerguer os serviços sem passar pelo app.
 
 > Armadilha: não crie essas tarefas com `schtasks /TR "...\arquivo.vbs"`. A barra
 > invertida antes da aspa final escapa a aspa, e o caminho engole o `/RL LIMITED`

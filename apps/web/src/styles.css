@@ -206,6 +206,21 @@ html:has(.stage.desktop) { background: transparent; }
   margin: 1rem 0 0.45rem;
 }
 .modal-section .hint { letter-spacing: 0.04em; text-transform: none; }
+/* opção marcável do modal (ex.: "Iniciar com o Windows") */
+.check {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: #cfeef7;
+  font-size: 0.82rem;
+  cursor: pointer;
+  user-select: none;
+}
+.check input {
+  width: auto;
+  accent-color: var(--cyan);
+  cursor: pointer;
+}
 .hint { color: #48707c; font-size: 0.72rem; }
 .modal-list { display: flex; flex-direction: column; gap: 0.35rem; }
 .opt {

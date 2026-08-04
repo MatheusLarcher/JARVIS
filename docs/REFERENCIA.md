@@ -162,8 +162,7 @@ O que ainda não existe está em [ROADMAP.md](ROADMAP.md).
 | `server/scripts/check_library.py` | Confere se a biblioteca está completa e íntegra. |
 | `server/scripts/prepare_voice_ref.py` | Prepara o áudio de referência da voz clonada. |
 | `server/scripts/trocar_tokens.py` | Roda tokens novos e atualiza a cópia guardada pelo app da bandeja. |
-| `server/scripts/instalar_tarefas.ps1` | Registra/conserta as tarefas "JARVIS Server" e "JARVIS Watchdog" com o caminho real do projeto. |
-| `server/watchdog.ps1` | Confere Ollama, servidor, voz e app da bandeja; sobe o que estiver fora. |
+| `server/watchdog.ps1` | Confere Ollama, servidor, voz e app da bandeja; sobe o que estiver fora. **Nada o agenda** — é ferramenta manual, o app já vigia a cada 30 s. |
 | `docs/diagrama/gerar.py` | Regera o diagrama do sistema (`docs/diagrama.png`). |
 
 ---
@@ -199,7 +198,12 @@ O que ainda não existe está em [ROADMAP.md](ROADMAP.md).
 ### App do PC (precisa do `--remote-debugging-port=9333`)
 
 `test_janela_destrava.py`, `test_janela_arrastar.py`, `test_janela_posicao.py`,
-`test_janela_transparencia.py`, `test_janela_desktop.py`.
+`test_janela_transparencia.py`, `test_janela_desktop.py`,
+`test_iniciar_com_windows.py` (clica na engrenagem e confere a chave `Run` do
+Windows por fora do app — marcar, desmarcar e marcar de novo).
+
+> Rode um de cada vez e **feche o modal** no fim: modal aberto deixa a janela
+> "pinada" e o teste seguinte falha em "some depois que termina".
 
 ### Medições
 

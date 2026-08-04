@@ -274,6 +274,29 @@ function ConfigModal({ devices, prefs, onSave, onClose }) {
   const [mics, setMics] = useState(prefs.mics || [])
   const [output, setOutput] = useState(prefs.output || '')
   const [levels, setLevels] = useState({})   // deviceId -> nível 0..1
+  // null = ainda não sei (ou não é o app do PC); a fonte da verdade é o main
+  const [comWindows, setComWindows] = useState(null)
+
+  // pergunta ao app qual é o estado REAL do registro do Windows, em vez de
+  // adivinhar — assim a marcação nunca mente sobre o que está valendo
+  useEffect(() => {
+    let vivo = true
+    window.jarvisDesktop?.autostartGet?.()
+      .then(v => { if (vivo) setComWindows(!!v) })
+      .catch(() => { })
+    return () => { vivo = false }
+  }, [])
+
+  const mudaComWindows = async (ligar) => {
+    setComWindows(ligar)                       // responde na hora
+    try {
+      // e corrige pelo que o Windows aceitou de fato
+      const real = await window.jarvisDesktop.autostartSet(ligar)
+      setComWindows(!!real)
+    } catch {
+      setComWindows(!ligar)
+    }
+  }
 
   const toggleMic = (id) =>
     setMics(m => m.includes(id) ? m.filter(x => x !== id) : [...m, id])
@@ -341,6 +364,17 @@ function ConfigModal({ devices, prefs, onSave, onClose }) {
             <option key={d.deviceId} value={d.deviceId}>{d.label || 'Saída'}</option>
           ))}
         </select>
+
+        {comWindows !== null && (
+          <>
+            <div className="modal-section">SISTEMA</div>
+            <label className="check" title="Liga o JARVIS junto com o Windows. Ele sobe o servidor, a voz e o Ollama sozinho.">
+              <input type="checkbox" checked={comWindows}
+                     onChange={e => mudaComWindows(e.target.checked)} />
+              Iniciar com o Windows
+            </label>
+          </>
+        )}
 
         <div className="modal-actions">
           <button className="btn primary" onClick={() => onSave({ mics, output })}>Salvar</button>

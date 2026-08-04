@@ -11,9 +11,9 @@ wake "Hey Jarvis" → ack local → "liga a luz da sala" → Nemotron transcreve
 - **Ambiente:** conda env `jarvis` (Py 3.11), torch 2.11+cu128 (RTX 5050 ok), NeMo do git main
   (o do pip 2.7.3 NÃO carrega o modelo — falta `rnnt_bpe_models_prompt`).
 - **Servidor:** porta 8040, log em `server/data/jarvis.log`. Quem sobe é o app da
-  bandeja (supervisor: Ollama 11434, servidor 8040, voz 8041, revisão a cada 30s);
-  a tarefa "JARVIS Server" (ONLOGON → `start_jarvis_hidden.vbs` → `start_jarvis.bat`
-  com loop) é redundância. Ver "Mover o projeto quebrou o auto-start inteiro".
+  bandeja (supervisor: Ollama 11434, servidor 8040, voz 8041, revisão a cada 30s).
+  Ele entra no boot só se você marcar "Iniciar com o Windows" na engrenagem — as
+  tarefas agendadas foram removidas. Ver "Um auto-start só, marcado por você".
 - **Web:** buildada em `apps/web/dist`, servida na raiz do 8040. Validada no browser.
 - **Android:** `apps/android` (`:app` tablet+celular, `:wear` relógio; código comum em
   `apps/android/shared/java`). Release assinado em `releases/Jarvis.apk` e
@@ -110,8 +110,8 @@ Infra de diagnóstico criada (usar SEMPRE antes de chutar):
 - `tests/diag_microfones.py` — mede todos os mics tocando som pelo alto-falante.
 - `tests/test_mic_real.py` — E2E acústico REAL (toca no alto-falante via CDP+setSinkId,
   confere em `/api/metrics/recent`). Resultado: ouviu "liga a luz da sala", 2,3s.
-- Tarefa **JARVIS Watchdog** (5 em 5 min) religa Ollama/servidor/voz/app que estiverem
-  fora. O app da bandeja faz a mesma checagem a cada 30s, então é rede de segurança.
+- `server/watchdog.ps1` religa Ollama/servidor/voz/app que estiverem fora, mas **nada
+  o agenda**: virou ferramenta manual. Quem vigia é o app, a cada 30s.
 
 Armadilha de teste: `Get-Process JARVIS` NÃO pega o app em dev (lá o processo chama
 `electron.exe`) — matar só o JARVIS.exe deixa a instância antiga viva e o
@@ -370,6 +370,43 @@ Armadilhas encontradas ao consertar:
 - Filtrar processos por `CommandLine -like "*start_jarvis*"` pega **o próprio PowerShell**
   que roda o filtro (a string está na linha de comando dele). Excluir `$PID`.
 
+## Um auto-start só, marcado por você (2026-08-04)
+
+Sintoma do Matheus: **"quando inicia o pc, tá dando erro em um script jarvis"**.
+
+Era a tarefa **"JARVIS Server"**, que ainda chamava
+`wscript.exe "...\Documents\GitHub\JARVIS\server\start_jarvis_hidden.vbs"` — caminho
+que deixou de existir quando o projeto mudou de pasta. O `wscript` não acha o arquivo
+e abre uma **caixa de erro em todo boot**.
+
+Levantando tudo, o JARVIS tinha **quatro** mecanismos de auto-start ao mesmo tempo:
+as tarefas "JARVIS Server" e "JARVIS Watchdog", a chave `Run` do usuário e um atalho
+`JARVIS.lnk` na pasta Inicializar. Os quatro foram removidos.
+
+E havia um defeito que tornava a opção existente inútil: o `main.js` fazia
+`app.setLoginItemSettings({ openAtLogin: true })` **a cada início**. Desmarcar
+"Iniciar com o Windows" no menu da bandeja não colava — bastava reabrir o app pra
+voltar sozinho.
+
+Agora existe **uma** fonte de verdade: a opção "Iniciar com o Windows", na engrenagem
+da janela e no menu da bandeja (as duas gravam no mesmo lugar). A escolha vai pro
+`iniciarComWindows` do `config.json` e é aplicada com `setLoginItemSettings`. Sem
+escolha salva, vale o que o Windows já tem registrado — ou seja, instalar não liga
+nada por conta própria.
+
+Coberto por `tests/test_iniciar_com_windows.py`, que clica na interface de verdade e
+confere a chave `Run` **por fora do app** — marcar, desmarcar, marcar de novo — e
+depois reinicia o app duas vezes pra provar que a escolha sobrevive.
+
+### Bug achado durante esse teste: `log()` entrava em laço com o stdout fechado
+
+O `console.log` do `log()` estava **fora** do `try`. Quando o app é aberto por um
+terminal que fecha, escrever na saída dá `EPIPE`; como o
+`process.on('uncaughtException')` chama esse mesmo `log()`, virava
+`EPIPE → log → EPIPE`. Na prática o `desktop.log` enchia de stack trace e a janela se
+recarregava no meio do uso — foi assim que o modal sumiu no primeiro teste. O
+`console.log` agora tem o próprio `try`.
+
 ## Caça a bugs no caminho do pedido (2026-08-03)
 
 Varredura do fluxo inteiro com o sistema no ar, medindo cada etapa pela telemetria.
@@ -456,9 +493,6 @@ ganho de latência disponível — e ainda não foi feito.
 ## Pendências / próximos passos
 
 - [ ] Conectar Home Assistant REAL (falta URL + token do Matheus; modo mock ativo).
-- [ ] Regravar a tarefa **JARVIS Server** num PowerShell **como administrador**
-      (`server\scripts\instalar_tarefas.ps1`). Ela ainda aponta pro caminho antigo e
-      falha em silêncio. Não é urgente: o app da bandeja e o Watchdog já sobem tudo.
 - [ ] Testar o wake com a voz real do Matheus e calibrar (`fuzzy_max_edits`,
       `vad.min_speech_ms`). Observado no log: o app da bandeja com mic real chegou a
       registrar um "chamou: 'Jarvis.'" sem ninguém falar — se acontecer muito, subir

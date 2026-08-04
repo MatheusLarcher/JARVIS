@@ -33,7 +33,11 @@ function log(msg) {
     if (!logFile) logFile = path.join(app.getPath('userData'), 'desktop.log')
     fs.appendFileSync(logFile, line)
   } catch { }
-  console.log(line.trim())
+  // O console.log PRECISA estar protegido. Se o app foi aberto por um terminal
+  // que fechou, escrever na saída dá EPIPE — e como o handler de exceção lá
+  // embaixo chama este mesmo log(), virava laço: EPIPE -> log -> EPIPE, enchendo
+  // o arquivo e derrubando a janela no meio do uso.
+  try { console.log(line.trim()) } catch { }
 }
 process.on('uncaughtException', (e) => log(`ERRO nao tratado: ${e && e.stack}`))
 app.setAppUserModelId('com.larchertech.jarvis')
@@ -101,6 +105,40 @@ function salvaConfig(cfg) {
     fs.writeFileSync(path.join(app.getPath('userData'), 'config.json'),
                      JSON.stringify(cfg, null, 2))
   } catch { }
+}
+
+// ---------------------------------------------------------------------------
+// Iniciar com o Windows: UMA fonte de verdade, escolhida por você.
+//
+// Antes eram quatro mecanismos ao mesmo tempo — duas tarefas agendadas, a chave
+// Run e um atalho na pasta Inicializar. A tarefa "JARVIS Server" guardava o
+// caminho do projeto por extenso; quando a pasta mudou, ela passou a chamar um
+// .vbs inexistente e o wscript abria um ERRO DE SCRIPT em todo boot.
+//
+// Agora existe só o login item do app. Ligar o JARVIS é abrir o app, e o app
+// sobe servidor, voz e Ollama (ver garanteServicos).
+// ---------------------------------------------------------------------------
+function autostartLigado(cfg) {
+  // sem escolha salva, vale o que o Windows já tem registrado
+  if (typeof cfg.iniciarComWindows === 'boolean') return cfg.iniciarComWindows
+  return app.getLoginItemSettings().openAtLogin
+}
+
+function aplicaAutostart(ligar) {
+  try {
+    app.setLoginItemSettings({ openAtLogin: !!ligar })
+  } catch (e) {
+    log(`nao consegui mudar o iniciar-com-o-Windows: ${e && e.message}`)
+  }
+  return app.getLoginItemSettings().openAtLogin
+}
+
+function defineAutostart(cfg, ligar) {
+  cfg.iniciarComWindows = !!ligar
+  salvaConfig(cfg)
+  const real = aplicaAutostart(ligar)
+  log(`iniciar com o Windows: ${real ? 'ligado' : 'desligado'}`)
+  return real
 }
 
 // ---------------------------------------------------------------------------
@@ -333,8 +371,9 @@ function atualizaMenu(cfg) {
     },
     {
       label: 'Iniciar com o Windows', type: 'checkbox',
-      checked: app.getLoginItemSettings().openAtLogin,
-      click: (item) => app.setLoginItemSettings({ openAtLogin: item.checked }),
+      checked: autostartLigado(cfg),
+      // a mesma opção da engrenagem: as duas gravam no config.json
+      click: (item) => { defineAutostart(cfg, item.checked); atualizaMenu(cfg) },
     },
     { type: 'separator' },
     { label: `Servidor (${cfg.host}): ${marca(estadoServicos.servidor)}`, enabled: false },
@@ -367,9 +406,11 @@ app.whenReady().then(() => {
   ses.setPermissionRequestHandler((_wc, permission, cb) => cb(permission === 'media'))
   createWindow(cfg)
   buildTray(cfg)
-  if (app.isPackaged && process.argv.indexOf('--no-autostart') === -1) {
-    app.setLoginItemSettings({ openAtLogin: true })
-  }
+  // NÃO forçar mais o auto-start aqui. Antes isto religava `openAtLogin: true`
+  // a cada início, então desmarcar a opção não colava: bastava reabrir o app pra
+  // ela voltar sozinha. Agora quem manda é a escolha do usuário, guardada no
+  // config.json e aplicada por aplicaAutostart().
+  aplicaAutostart(autostartLigado(cfg))
 
   // sobe o que estiver faltando e continua vigiando: o app é o supervisor do
   // JARVIS, não só a janela dele
@@ -409,6 +450,13 @@ app.whenReady().then(() => {
     if (win) win.hide()
   })
   ipcMain.on('jarvis-quit', () => { win.destroy(); app.quit() })
+  // opção "Iniciar com o Windows" da engrenagem
+  ipcMain.handle('jarvis-autostart-get', () => autostartLigado(cfg))
+  ipcMain.handle('jarvis-autostart-set', (_e, ligar) => {
+    const real = defineAutostart(cfg, ligar)
+    atualizaMenu(cfg)          // mantém a bandeja igual à engrenagem
+    return real
+  })
   ipcMain.handle('jarvis-is-visible', () => !!win && win.isVisible())
   ipcMain.on('jarvis-focus', () => { if (win) win.focus() })
   ipcMain.handle('jarvis-window-info', () => ({

@@ -20,6 +20,10 @@ contextBridge.exposeInMainWorld('jarvisDesktop', {
   speaking: (on) => ipcRenderer.send('jarvis-speaking', !!on),
   hide: () => ipcRenderer.send('jarvis-hide'),   // botão X: some pra bandeja
   quit: () => ipcRenderer.send('jarvis-quit'),
+  // "Iniciar com o Windows": devolvem o estado REAL depois de aplicar, pra
+  // interface não mostrar marcado algo que o Windows recusou
+  autostartGet: () => ipcRenderer.invoke('jarvis-autostart-get'),
+  autostartSet: (on) => ipcRenderer.invoke('jarvis-autostart-set', !!on),
   // visibilidade REAL da janela (o visibilityState do Chromium não muda com
   // backgroundThrottling desligado) — usado pelos testes
   isVisible: () => ipcRenderer.invoke('jarvis-is-visible'),

@@ -29,9 +29,14 @@ O passo a passo completo do ambiente está em
 
 ## Como ligar
 
-Tudo liga sozinho com o Windows: o app da bandeja entra na inicialização e ele mesmo
-sobe o Ollama, o servidor e o serviço de voz (e revisa a cada 30 s). Abrir o
-`JARVIS.exe` na mão tem o mesmo efeito. Pra subir só o servidor, sem o app:
+Abrir o app da bandeja liga o JARVIS inteiro: ele mesmo sobe o Ollama, o servidor e o
+serviço de voz, e revisa a cada 30 s.
+
+Pra ele ligar junto com o PC, marque **"Iniciar com o Windows"** na engrenagem da
+janela (o menu da bandeja tem a mesma opção). Desmarcado, nada do JARVIS entra no
+boot — é a única coisa que ele registra na inicialização.
+
+Pra subir só o servidor, sem o app:
 
 ```
 server\start_jarvis.bat
@@ -45,7 +50,7 @@ Depois abra `http://SEU-IP:8040` em qualquer navegador da casa — essa é a tel
 |---|---|---|
 | Tablet / Celular | `releases\Jarvis.apk` | Copie pro aparelho e instale. Na primeira tela, informe o IP do notebook (ex.: `192.168.0.10:8040`), o device id (`tablet-sala` ou `celular-matheus`) e o token que está em `config\devices.yml`. |
 | Galaxy Watch | `releases\Jarvis-Watch.apk` | Instale via ADB por Wi-Fi no relógio. Device id `galaxy-watch`. |
-| PC (este notebook) | `releases\JARVIS-Desktop-Setup.exe` | Instala o JARVIS de bandeja: fica só um ícone oculto perto do relógio, ouvindo. Diga "Jarvis" e a janela com o reator aparece; ao terminar, ela some sozinha. Arraste a janela pra onde quiser (ela lembra o lugar) e use o **X** pra recolher pra bandeja. Inicia com o Windows. |
+| PC (este notebook) | `releases\JARVIS-Desktop-Setup.exe` | Instala o JARVIS de bandeja: fica só um ícone oculto perto do relógio, ouvindo. Diga "Jarvis" e a janela com o reator aparece; ao terminar, ela some sozinha. Arraste a janela pra onde quiser (ela lembra o lugar) e use o **X** pra recolher pra bandeja. Pra ele ligar junto com o PC, marque "Iniciar com o Windows" na engrenagem. |
 
 No tablet, deixe o app aberto no suporte: a tela fica preta com relógio, temperatura e o
 reator respirando. É só falar "Jarvis".

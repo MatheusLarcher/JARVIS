@@ -60,7 +60,7 @@ echo  Versao: %VERSAO%
 
 rem ---------------------------------------------------------------- 1. dependencias
 echo.
-echo  [1/5] dependencias...
+echo  [1/4] dependencias...
 if not exist "%WEB%\node_modules" (
     echo        instalando as da interface ^(demora na primeira vez^)...
     pushd "%WEB%"
@@ -82,7 +82,7 @@ if not exist "%APP%\node_modules" (
 
 rem ---------------------------------------------------------------- 2. interface
 echo.
-echo  [2/5] buildando a interface...
+echo  [2/4] buildando a interface...
 pushd "%WEB%"
 call npm run build
 if errorlevel 1 ( popd & echo  [X] o build da interface falhou & goto :erro )
@@ -94,7 +94,7 @@ if not exist "%WEB%\dist\index.html" (
 
 rem ---------------------------------------------------------------- 3. instalador
 echo.
-echo  [3/5] gerando o instalador ^(pode levar alguns minutos^)...
+echo  [3/4] gerando o instalador ^(pode levar alguns minutos^)...
 rem  `npm run dist` ja roda o sync-web antes do electron-builder
 pushd "%APP%"
 call npm run dist
@@ -111,7 +111,7 @@ if not exist "%GERADO%" (
 
 rem ---------------------------------------------------------------- 4. entrega
 echo.
-echo  [4/5] publicando em releases...
+echo  [4/4] publicando em releases...
 if not exist "%SAIDA%" mkdir "%SAIDA%"
 copy /y "%GERADO%" "%FINAL%" >nul
 if errorlevel 1 (
@@ -120,17 +120,10 @@ if errorlevel 1 (
     goto :erro
 )
 
-rem ---------------------------------------------------------------- 5. tarefas
-rem  O exe sozinho e so a janela: quem sobe servidor, voz e Ollama e o app da
-rem  bandeja (na inicializacao) com o vigia por tras. As tarefas guardam caminho
-rem  absoluto, entao precisam ser regravadas sempre que o projeto muda de lugar.
-echo.
-echo  [5/5] registrando as tarefas do Windows...
-powershell -NoProfile -ExecutionPolicy Bypass -File "%RAIZ%\server\scripts\instalar_tarefas.ps1"
-if errorlevel 1 (
-    echo  [!] nao consegui registrar as tarefas — o app ainda sobe tudo sozinho,
-    echo      mas sem o vigia pra reerguer o que cair.
-)
+rem  Nao registra nada no boot: quem decide isso e a opcao "Iniciar com o
+rem  Windows", na engrenagem do app. Tarefa agendada guarda caminho absoluto e
+rem  foi exatamente o que quebrou quando o projeto mudou de pasta (o wscript
+rem  passou a abrir erro de script em todo boot).
 
 for %%f in ("%FINAL%") do set /a MB=%%~zf/1048576
 echo.
@@ -140,7 +133,7 @@ echo.
 echo   %FINAL%
 echo.
 echo   E so dar dois cliques nele pra instalar.
-echo   O app entra sozinho na inicializacao do Windows.
+echo   Pra ele ligar junto com o Windows, marque a opcao na engrenagem.
 echo  =========================================
 echo.
 
