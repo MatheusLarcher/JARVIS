@@ -26,12 +26,31 @@ if (!app.isPackaged) {
 if (!app.requestSingleInstanceLock()) app.quit()
 
 // log próprio: sem isto não dá pra saber por que o app não subiu no boot
+const LOG_MAX_BYTES = 5 * 1024 * 1024
 let logFile = null
+
+// Guarda a volta anterior e recomeça. Sem teto, o arquivo cresce pra sempre:
+// aqui um laço de EPIPE (ver o comentário no log()) deixou 312 MB de stack
+// trace no disco, e mesmo sem laço um log 24/7 nunca para de crescer.
+function giraSePreciso(arquivo) {
+  try {
+    if (fs.statSync(arquivo).size < LOG_MAX_BYTES) return
+    fs.rmSync(arquivo + '.old', { force: true })
+    fs.renameSync(arquivo, arquivo + '.old')
+  } catch { }
+}
+
 function log(msg) {
   const line = `[${new Date().toISOString()}] ${msg}\n`
   try {
-    if (!logFile) logFile = path.join(app.getPath('userData'), 'desktop.log')
+    if (!logFile) {
+      logFile = path.join(app.getPath('userData'), 'desktop.log')
+      giraSePreciso(logFile)
+    }
     fs.appendFileSync(logFile, line)
+    // um laço de erro enche o arquivo dentro da MESMA execução, então não dá
+    // pra conferir só no start
+    if (Math.random() < 0.01) giraSePreciso(logFile)
   } catch { }
   // O console.log PRECISA estar protegido. Se o app foi aberto por um terminal
   // que fechou, escrever na saída dá EPIPE — e como o handler de exceção lá
