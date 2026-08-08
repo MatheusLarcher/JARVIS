@@ -370,6 +370,49 @@ Armadilhas encontradas ao consertar:
 - Filtrar processos por `CommandLine -like "*start_jarvis*"` pega **o próprio PowerShell**
   que roda o filtro (a string está na linha de comando dele). Excluir `$PID`.
 
+## O "cmd de nobreak" piscando na tela (2026-08-08)
+
+Sintoma do Matheus: **"tá aparecendo um cmd de nobreak toda hora"**. Era mesmo uma
+janela `timeout /t 5 /nobreak`, e a árvore de processos entregou a causa:
+
+```
+cmd /c start_jarvis.bat      <- o app subiu o servidor
+  └ cmd /c start_voice.bat   <- o .bat já sobe a voz junto     OK
+cmd /c start_voice.bat       <- o app subiu a voz DE NOVO      bug
+  └ timeout /t 5 /nobreak    <- a janela que aparecia
+```
+
+Bug meu, no `garanteServicos`: na subida a porta 8040 estava fechada, então o app
+rodava o `.vbs` do servidor — **que sobe a voz junto**. Trinta segundos depois, a
+revisão via o servidor no ar e a 8041 **ainda** fechada (o Chatterbox demora a
+carregar) e subia uma segunda cópia da voz. A perdedora da porta morria na hora, o
+`:loop` do `.bat` a reerguia, e a janela do `timeout` piscava a cada 5 s, pra sempre.
+
+Três consertos, do mais específico ao mais geral:
+
+1. Ao subir o servidor, o app marca a voz como "já subindo" — porque o
+   `start_jarvis.bat` cuida dela.
+2. `start_jarvis.bat` e `start_voice.bat` ganharam trava de duplicata: se a porta já
+   tem dono, a cópia **sai** em vez de reiniciar pra sempre. É a rede de segurança
+   que vale mesmo se alguém subir o `.bat` na mão.
+3. A voz agora sobe por `start_voice_hidden.vbs`. O `windowsHide` do Node esconde o
+   `cmd`, mas o `timeout.exe` de dentro do loop abre console próprio e aparece.
+
+**Armadilha da trava:** a mensagem não podia ir pro `voice.log`. O serviço que está
+no ar segura esse arquivo (`>> voice.log` no `.bat`), e a duplicata levava
+"O arquivo já está sendo usado por outro processo" — saía com código 0 e **sem deixar
+rastro**, o que me fez achar que a trava não tinha funcionado. Vai pro
+`server/data/startup.log`, que ninguém segura.
+
+Validado com partida a frio: os três serviços sobem, sobra **um** loop de cada e
+**zero** `timeout.exe`, e o `startup.log` mostra as 3 duplicatas de corrida saindo
+sozinhas.
+
+> **Armadilha de diagnóstico que me pegou duas vezes nesta sessão:** contar processos
+> com `Get-CimInstance ... CommandLine -match 'start_voice'` conta **o próprio
+> PowerShell**, que tem essa string na linha de comando. Deu "6 loops de voz" quando
+> havia 1. Sempre excluir `powershell.exe` (ou o `$PID`) do filtro.
+
 ## Um auto-start só, marcado por você (2026-08-04)
 
 Sintoma do Matheus: **"quando inicia o pc, tá dando erro em um script jarvis"**.

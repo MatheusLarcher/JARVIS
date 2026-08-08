@@ -15,6 +15,15 @@ rem servico de voz (env jarvis-tts, porta 8041) em janela propria, com watchdog
 start "JARVIS Voz" /min cmd /c "%~dp0start_voice.bat"
 
 :loop
+rem  Mesma trava do start_voice.bat: duplicata sai, em vez de reiniciar pra
+rem  sempre disputando uma porta que ja tem dono.
+netstat -ano | findstr /r /c:":8040 " | findstr /c:"LISTENING" >nul 2>&1
+if not errorlevel 1 (
+    rem  mesmo motivo do start_voice.bat: o servidor no ar segura o jarvis.log
+    echo [%date% %time%] ja existe servidor na 8040; encerrando esta copia >> server\data\startup.log
+    exit /b 0
+)
+
 rem -u = log sem buffer (senao o jarvis.log so aparece quando enche 8KB)
 "%USERPROFILE%\miniconda3\envs\jarvis\python.exe" -u server\run.py >> server\data\jarvis.log 2>&1
 echo [%date% %time%] servidor caiu, reiniciando em 5s... >> server\data\jarvis.log

@@ -225,12 +225,17 @@ async function garanteServicos(cfg) {
     roda(ollamaExe(), ['serve'])
   }
   if (!estado.servidor && !jaSubindo('servidor')) {
-    // o .vbs roda o start_jarvis.bat sem janela de console; ele já sobe a voz junto
     log('servidor fora do ar; subindo (leva ~1min carregando os modelos)')
     roda('wscript.exe', [path.join(raiz, 'server', 'start_jarvis_hidden.vbs')])
+    // O start_jarvis.bat sobe a VOZ junto. Sem marcar isso aqui, a revisão de
+    // 30s depois via o servidor no ar e a 8041 ainda fechada (o modelo demora a
+    // carregar) e subia uma SEGUNDA cópia da voz. A perdedora da porta morria,
+    // o `:loop` do .bat a reerguia, e um `timeout /t 5 /nobreak` piscava na tela
+    // a cada 5 segundos, pra sempre.
+    jaSubindo('voz')
   } else if (estado.servidor && !estado.voz && !jaSubindo('voz')) {
     log('servico de voz fora do ar; subindo')
-    roda('cmd.exe', ['/c', path.join(raiz, 'server', 'start_voice.bat')])
+    roda('wscript.exe', [path.join(raiz, 'server', 'start_voice_hidden.vbs')])
   }
   return estado
 }

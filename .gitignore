@@ -15,6 +15,7 @@ releases/
 apps/desktop/node_modules/
 apps/desktop/dist/
 server/data/jarvis.log
+server/data/startup.log
 server/data/voice.log
 server/data/watchdog.log
 apps/desktop/build/web/
