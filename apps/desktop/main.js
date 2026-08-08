@@ -204,6 +204,83 @@ function jaSubindo(chave) {
   return false
 }
 
+// ---------------------------------------------------------------------------
+// O back roda DENTRO do app: python direto, sem cmd, sem .bat, sem .vbs.
+//
+// A cadeia antiga era `wscript -> cmd -> start_jarvis.bat -> python`, com o
+// reinício feito por `timeout /t 5 /nobreak` dentro do .bat. Cada elo desses é
+// uma chance de janela de console aparecer — e aparecia. Aqui o Electron é o
+// pai do python, o reinício é em JavaScript e nenhum console existe pra piscar.
+// ---------------------------------------------------------------------------
+const ESPERA_REINICIO_MS = 5000
+const filhos = {}            // nome -> ChildProcess
+let encerrando = false
+
+function pythonDoEnv(nome) {
+  const base = process.env.CONDA_PREFIX_1 || path.join(app.getPath('home'), 'miniconda3')
+  return path.join(base, 'envs', nome, 'python.exe')
+}
+
+const SERVICOS = {
+  servidor: {
+    porta: PORTA_SERVIDOR, env: 'jarvis',
+    args: ['-u', 'server/run.py'], log: 'jarvis.log',
+  },
+  voz: {
+    porta: PORTA_VOZ, env: 'jarvis-tts',
+    args: ['-u', 'server/voice_service/service.py', '--preload'], log: 'voice.log',
+  },
+}
+
+function sobeServico(nome, raiz) {
+  const spec = SERVICOS[nome]
+  const exe = pythonDoEnv(spec.env)
+  if (!fs.existsSync(exe)) {
+    log(`nao achei o python do env '${spec.env}' em ${exe}`)
+    return
+  }
+  let saida
+  try {
+    saida = fs.openSync(path.join(raiz, 'server', 'data', spec.log), 'a')
+  } catch { saida = 'ignore' }
+
+  const filho = spawn(exe, spec.args, {
+    cwd: raiz,
+    windowsHide: true,
+    stdio: ['ignore', saida, saida],
+    env: {
+      ...process.env,
+      // a runtime Fortran do numpy/scipy mata o processo em evento de
+      // fechar/logoff do console — o velho "forrtl: error (200)"
+      FOR_DISABLE_CONSOLE_CTRL_HANDLER: '1',
+      // sem isto o cache dos modelos volta pro C: e rebaixa ~50 GB
+      HF_HOME: process.env.HF_HOME || 'D:\\ai-cache\\huggingface',
+    },
+  })
+  filhos[nome] = filho
+  log(`${nome}: subindo (pid ${filho.pid})`)
+
+  filho.on('exit', (code) => {
+    delete filhos[nome]
+    if (encerrando) return
+    log(`${nome} caiu (codigo ${code}); reiniciando em 5s`)
+    setTimeout(async () => {
+      // se outra copia ja pegou a porta nesse meio tempo, nao insistir
+      if (encerrando || await portaAberta(spec.porta)) return
+      sobeServico(nome, raiz)
+    }, ESPERA_REINICIO_MS)
+  })
+  filho.on('error', (e) => log(`${nome}: erro ao subir — ${e && e.message}`))
+}
+
+// o back é do app: fechar o JARVIS fecha o back junto
+function encerraFilhos() {
+  encerrando = true
+  for (const [nome, p] of Object.entries(filhos)) {
+    try { process.kill(p.pid); log(`${nome}: encerrado com o app`) } catch { }
+  }
+}
+
 async function garanteServicos(cfg) {
   const raiz = cfg.projeto
   const estado = {
@@ -224,18 +301,13 @@ async function garanteServicos(cfg) {
     log('Ollama fora do ar; subindo')
     roda(ollamaExe(), ['serve'])
   }
-  if (!estado.servidor && !jaSubindo('servidor')) {
-    log('servidor fora do ar; subindo (leva ~1min carregando os modelos)')
-    roda('wscript.exe', [path.join(raiz, 'server', 'start_jarvis_hidden.vbs')])
-    // O start_jarvis.bat sobe a VOZ junto. Sem marcar isso aqui, a revisão de
-    // 30s depois via o servidor no ar e a 8041 ainda fechada (o modelo demora a
-    // carregar) e subia uma SEGUNDA cópia da voz. A perdedora da porta morria,
-    // o `:loop` do .bat a reerguia, e um `timeout /t 5 /nobreak` piscava na tela
-    // a cada 5 segundos, pra sempre.
-    jaSubindo('voz')
-  } else if (estado.servidor && !estado.voz && !jaSubindo('voz')) {
-    log('servico de voz fora do ar; subindo')
-    roda('wscript.exe', [path.join(raiz, 'server', 'start_voice_hidden.vbs')])
+  // Cada serviço é independente: nenhum sobe o outro, então some a corrida que
+  // fazia duas cópias da voz disputarem a 8041. `filhos[nome]` evita subir de
+  // novo o que já está de pé mas ainda não abriu a porta (o modelo demora).
+  for (const [nome, spec] of Object.entries(SERVICOS)) {
+    if (estado[nome] || filhos[nome] || jaSubindo(nome)) continue
+    log(`${nome} fora do ar` + (nome === 'servidor' ? ' (leva ~1min carregando os modelos)' : ''))
+    sobeServico(nome, raiz)
   }
   return estado
 }
@@ -513,3 +585,5 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => { /* vive na bandeja */ })
+// "Sair" fecha o JARVIS inteiro, back junto — ele roda dentro do app agora
+app.on('before-quit', encerraFilhos)

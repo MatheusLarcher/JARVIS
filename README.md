@@ -30,7 +30,8 @@ O passo a passo completo do ambiente está em
 ## Como ligar
 
 Abrir o app da bandeja liga o JARVIS inteiro: ele mesmo sobe o Ollama, o servidor e o
-serviço de voz, e revisa a cada 30 s.
+serviço de voz, e revisa a cada 30 s. O servidor roda **dentro do app**, sem nenhuma
+janela de console — e fecha junto quando você sai pela bandeja.
 
 Pra ele ligar junto com o PC, marque **"Iniciar com o Windows"** na engrenagem da
 janela (o menu da bandeja tem a mesma opção). Desmarcado, nada do JARVIS entra no

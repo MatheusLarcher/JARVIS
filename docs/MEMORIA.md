@@ -370,6 +370,39 @@ Armadilhas encontradas ao consertar:
 - Filtrar processos por `CommandLine -like "*start_jarvis*"` pega **o próprio PowerShell**
   que roda o filtro (a string está na linha de comando dele). Excluir `$PID`.
 
+## O back roda dentro do app (2026-08-08)
+
+Pedido do Matheus: *"o back tem q ficar dentro do exe, não quero q apareça cmd dele"*.
+
+**Embutir de verdade não cabe:** medido, o env `jarvis` tem **6,23 GB**, o
+`jarvis-tts` **5,18 GB**, e os modelos ocupam **69,7 GB** em `D:\ai-cache`. Um exe
+com tudo dentro passaria de 11 GB e ainda não resolveria os modelos. O exe segue com
+78 MB usando os envs conda da máquina — mesma escolha que ele já tinha feito no
+`english_teach` quando mostrei os números.
+
+**O que dava pra resolver, e foi resolvido:** o console. A cadeia era
+`wscript → cmd → start_jarvis.bat → python`, com o reinício feito por
+`timeout /t 5 /nobreak` dentro do `.bat`. Cada elo é uma chance de janela aparecer.
+
+Agora o Electron roda o `python.exe` **direto**: sem cmd, sem `.bat`, sem `.vbs`, e o
+laço de reinício é JavaScript (`sobeServico`, com espera de 5 s e checagem da porta
+antes de insistir). O env vai no `spawn` (`FOR_DISABLE_CONSOLE_CTRL_HANDLER`,
+`HF_HOME`) e a saída dos processos é anexada aos mesmos `jarvis.log` / `voice.log`.
+
+Ganhos além do console sumir:
+- **cada serviço é independente** — nenhum sobe o outro, então some de vez a corrida
+  que fazia duas cópias da voz disputarem a 8041;
+- **o back é do app**: fechar o JARVIS fecha o back junto, com **zero órfãos**.
+  Vale até em kill forçado, porque o Electron põe os filhos no mesmo *job object* —
+  testado matando o `JARVIS.exe` com `Stop-Process -Force`.
+
+Medido na partida a frio: `8040` e `8041` sobem, os dois `python.exe` aparecem com
+`ParentProcessId = JARVIS.exe`, e a contagem de `cmd/wscript/timeout` fica em **0**
+durante os 100 s de observação.
+
+Os `.bat` continuam no repositório para subir o servidor na mão, e mantêm a trava de
+duplicata.
+
 ## O "cmd de nobreak" piscando na tela (2026-08-08)
 
 Sintoma do Matheus: **"tá aparecendo um cmd de nobreak toda hora"**. Era mesmo uma

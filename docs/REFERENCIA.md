@@ -155,9 +155,9 @@ O que ainda não existe está em [ROADMAP.md](ROADMAP.md).
 | Script | Pra quê |
 |---|---|
 | `gerar_exe.bat` | Gera o instalador do Windows num comando (na raiz do projeto). |
-| `server/start_jarvis.bat` | Sobe servidor + voz, cada um com watchdog que reinicia sozinho. |
-| `server/start_voice.bat` | Só o serviço de voz (8041). |
-| `server/start_jarvis_hidden.vbs` | O mesmo, sem janela — é o que entra no auto-start do Windows. |
+| `server/start_jarvis.bat` | Sobe servidor + voz na mão, cada um com laço de reinício. **O app não usa mais**: ele roda o `python.exe` direto, sem console. Tem trava de duplicata (se a porta já tem dono, sai). |
+| `server/start_voice.bat` | Só o serviço de voz (8041), mesma trava. |
+| `server/start_jarvis_hidden.vbs`, `server/start_voice_hidden.vbs` | Os mesmos sem janela. Sobraram para uso manual. |
 | `server/scripts/build_library.py` | Gera os wav das frases prontas (`--verify` confere pela transcrição). |
 | `server/scripts/check_library.py` | Confere se a biblioteca está completa e íntegra. |
 | `server/scripts/prepare_voice_ref.py` | Prepara o áudio de referência da voz clonada. |
