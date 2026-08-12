@@ -97,6 +97,17 @@ Dois caminhos, e a escolha muda o desenho:
 
 Não fiz nenhum dos dois porque é decisão de arquitetura, não conserto.
 
+### 7c. Voz clonada rápida (XTTS-v2) — pra desfazer o remendo do `perfil_resposta`
+
+Hoje a resposta livre do modelo sai em **edge-tts**, não na sua voz, porque o
+Chatterbox roda a RTF 3–5x nesta placa (10 a 24 s por frase, medido — ver
+[VOZ.md](VOZ.md)). Frase pronta continua na voz clonada.
+
+Trocar o Chatterbox por um motor de clonagem com **streaming** (XTTS-v2 é o
+candidato) devolveria a sua voz nas respostas ao vivo. O jeito certo: env
+**isolado**, medir na mão contra os números do VOZ.md, e só trocar se ganhar de
+verdade — instalar por cima do `jarvis-tts` arrisca o torch que já funciona.
+
 ### 8. Resposta melhor
 
 O `qwen3.5:0.8b` é fraco — perguntado sobre Santos Dumont, ele fala de "um

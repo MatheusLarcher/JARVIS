@@ -83,9 +83,14 @@ class DialogManager:
                          "seq": self._proximo_seq(), "ultimo": False})
         return text
 
-    async def _speak_tts(self, text: str):
-        """Fala um trecho; o device toca em fila, na ordem recebida."""
-        path = await tts.get_or_synthesize(text)
+    async def _speak_tts(self, text: str, perfil: str | None = None):
+        """Fala um trecho; o device toca em fila, na ordem recebida.
+
+        `perfil` troca a voz só desta fala. Serve pra resposta livre do modelo,
+        que nunca repete e por isso nunca está em cache — na voz clonada ela
+        custava 10 a 22s (RTF 3-5x nesta placa).
+        """
+        path = await tts.get_or_synthesize(text, perfil)
         if self.interaction and "tts_first_audio_ms" not in self.interaction.marks:
             self.interaction.mark("tts_first_audio_ms")
         await self.send({"type": "speak", "text": text,
@@ -103,6 +108,8 @@ class DialogManager:
             primeiro=config.settings["tts"].get("stream_primeiras_palavras", 3),
             maximo=config.settings["tts"].get("stream_max_palavras", 14),
         )
+        # voz da resposta livre: ver o comentário em settings.yml → tts.perfil_resposta
+        perfil = config.settings["tts"].get("perfil_resposta")
         completo = []
 
         async for novo in adk_agent.ask_stream(self.transcript_atual, ctx, agente):
@@ -110,10 +117,10 @@ class DialogManager:
                 self.interaction.mark("llm_first_token_ms")
             completo.append(novo)
             for pedaco in chunker.feed(novo):
-                await self._speak_tts(pedaco)
+                await self._speak_tts(pedaco, perfil)
 
         for pedaco in chunker.flush():
-            await self._speak_tts(pedaco)
+            await self._speak_tts(pedaco, perfil)
         return "".join(completo).strip()
 
     async def on_final(self, transcript: str):

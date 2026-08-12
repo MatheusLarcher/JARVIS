@@ -66,6 +66,14 @@ tts:
       rate: "+10%"
       pitch: "-2Hz"
   default_profile: jarvis_br
+  # Voz da RESPOSTA LIVRE do modelo (o que ele inventa na hora e nunca repete,
+  # entao nunca esta em cache). Medido nesta placa, mesma frase:
+  #   jarvis_br (Chatterbox, voz clonada) .. 10 a 22s   <- RTF 3-5x, inviavel ao vivo
+  #   jarvis_edge (edge-tts) ............... 1,3 a 1,8s, 1o audio ~1,0s
+  # Tudo que e frase pronta (biblioteca, cumprimentos, hora, "Sim?") continua na
+  # voz CLONADA, porque ja esta gravada em disco e toca instantanea.
+  # Para voltar tudo pra voz clonada, e so apagar esta linha.
+  perfil_resposta: jarvis_edge
   cache_dir: server/data/tts_cache
   library_dir: server/data/library
   # mantem sempre no cache as frases previsiveis (hora/temperatura)

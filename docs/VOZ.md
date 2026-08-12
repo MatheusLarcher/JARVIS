@@ -66,6 +66,32 @@ aquecido). Quatro coisas escondem isso:
 Se o serviço de voz estiver fora, o perfil cai automaticamente pro `jarvis_edge`
 (edge-tts) pra nunca ficar mudo.
 
+### A resposta livre do modelo não usa mais a voz clonada (2026-08-11)
+
+As quatro defesas acima cobrem o que **repete**. A resposta que o modelo inventa na
+hora nunca repete, então nunca está em cache — e é justamente ali que a lentidão
+aparece inteira. Medido nesta placa, mesma frase de 7 palavras:
+
+| Motor | Tempo | 1º áudio |
+|---|---|---|
+| `jarvis_br` (Chatterbox, voz clonada) | **10,2 – 24,1 s** | só no fim |
+| `jarvis_edge` (edge-tts) | **1,3 – 1,8 s** | ~1,0 s |
+
+O RTF real medido foi **3–5x**, não os 1,7–2,5 anotados antes. Descartado como causa:
+`cfg_weight` (testado 0,5 / 0,3 / 0,0 — sem diferença), disputa de VRAM (descarregar o
+modelo do Ollama não mudou) e clock da GPU (estava em 2797 de 3090 MHz). O Chatterbox
+0.1.7 também **não tem API de streaming**, então não dá pra começar a tocar antes de
+terminar de gerar.
+
+Por isso existe `tts.perfil_resposta` no `settings.yml`, hoje em `jarvis_edge`. Tudo
+que é frase pronta — biblioteca, cumprimentos, hora, "Sim?" — continua na **voz
+clonada**, porque já está gravada em disco e toca instantânea. Só a resposta livre
+troca de voz.
+
+**Para voltar tudo pra voz clonada:** apague a linha `perfil_resposta` do
+`settings.yml`. O caminho para ter a voz clonada *e* velocidade é trocar o Chatterbox
+por um motor de clonagem com streaming (XTTS-v2 é o candidato) — não foi feito.
+
 ## Falar enquanto o LLM ainda escreve
 
 Esperar a resposta inteira antes de gerar o áudio custava **até 40 s de silêncio**.

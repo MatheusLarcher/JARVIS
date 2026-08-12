@@ -370,6 +370,42 @@ Armadilhas encontradas ao consertar:
 - Filtrar processos por `CommandLine -like "*start_jarvis*"` pega **o próprio PowerShell**
   que roda o filtro (a string está na linha de comando dele). Excluir `$PID`.
 
+## A voz clonada é lenta demais pra resposta ao vivo (2026-08-11)
+
+Matheus: *"a voz tá demorando a ser construída com o tts q vc botou, preciso q seja
+rápido"*.
+
+Medido nesta placa, mesma frase de 7 palavras: Chatterbox **10,2 a 24,1 s**,
+edge-tts **1,3 a 1,8 s** (1º áudio ~1,0 s). O RTF real é **3–5x**, não os 1,7–2,5
+que estavam anotados no VOZ.md.
+
+Descartado como causa, tudo medido:
+- `cfg_weight` 0,5 / 0,3 / 0,0 — sem diferença (o CFG não é o gargalo);
+- disputa de VRAM — descarregar o modelo do Ollama (7359 → 7280 MiB) não mudou nada;
+- clock da GPU — estava em 2797 de 3090 MHz, não era a placa dormindo;
+- streaming — o Chatterbox 0.1.7 **não tem** (`[m for m in dir(M) if 'stream' in m]`
+  volta vazio), então não dá pra tocar antes de terminar de gerar.
+
+É lentidão do modelo. As quatro defesas que já existiam (biblioteca, cache, aquecedor,
+chunking) cobrem só o que **repete** — e a resposta que o modelo inventa na hora nunca
+repete, então paga o preço inteiro toda vez.
+
+Perguntei ao Matheus qual caminho seguir (trocar por XTTS-v2, usar edge-tts em tudo, ou
+híbrido) e ele não respondeu em 7 min. Segui pelo **híbrido, que é o reversível**:
+`tts.perfil_resposta: jarvis_edge` no settings.yml. Frase pronta continua na voz
+clonada (já está em disco, toca instantânea); só a resposta livre troca de voz.
+Apagar a linha volta tudo como era.
+
+**Achado ao revisar as medições antigas:** os `tts_first_audio_ms` de ~1,7 s que eu
+tinha registrado em 03/08 provavelmente **já eram edge-tts**, entrando pelo
+`fallback` do perfil quando o serviço de voz falhava (`TTS clone falhou
+(ConnectError) → usando voz de reserva`). Ou seja, a voz clonada já vinha falhando ao
+vivo sem ninguém perceber — o fallback existe justamente pra não ficar mudo, e
+escondeu o problema.
+
+Pendente: XTTS-v2 num env isolado, medido antes de trocar, é o caminho pra ter a voz
+clonada **e** velocidade.
+
 ## O back roda dentro do app (2026-08-08)
 
 Pedido do Matheus: *"o back tem q ficar dentro do exe, não quero q apareça cmd dele"*.
