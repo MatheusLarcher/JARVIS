@@ -370,6 +370,73 @@ Armadilhas encontradas ao consertar:
 - Filtrar processos por `CommandLine -like "*start_jarvis*"` pega **o próprio PowerShell**
   que roda o filtro (a string está na linha de comando dele). Excluir `$PID`.
 
+## Abrir programa: por que virou intent local, não ferramenta do LLM (2026-08-11)
+
+Matheus: *"quero q ele agora consiga executar ação, como abrir coisa programa
+(...) vamos começar com abrir coisas"*. Ele citou o `agent-code` (este próprio
+app, que tem `windows_launch_app` via um módulo nativo de controle do Windows)
+como referência.
+
+**Não integrei com o agent-code.** As ferramentas `windows_*` vivem dentro do
+processo Electron do agent-code, faladas por IPC com um `.exe` nativo (C#) que
+só o processo principal do agent-code sabe invocar — não tem API HTTP/IPC
+pensada pra outro processo (o servidor JARVIS, em Python) chamar de fora. A
+única porta de rede que o agent-code expõe é o `remoteServer.ts` (porta 8765),
+e ela é o *bridge* de celular→conversa de Claude Code, não um controle de
+Windows genérico. Bricolar uma ponte pra isso era desproporcional ao pedido
+("vamos começar com abrir coisas"): o JARVIS já roda no mesmo PC, então
+`os.startfile` resolve local, sem processo extra, sem depender do agent-code
+estar aberto.
+
+**Implementação:** `server/jarvis/system/apps.py::abrir()`. Resolve por, nessa
+ordem: utilitário embutido do Windows (bloco de notas, calculadora, painel de
+controle...) → apelido em `config/apps.yml` → atalho do Menu Iniciar por
+aproximação de nome (varre `*.lnk`, não precisa cadastrar nada) → fallback pra
+app só-da-Microsoft-Store (sem `.lnk` em arquivo — ex.: WhatsApp — via
+`Get-AppxPackage`/`Get-AppxPackageManifest` e lançamento por
+`shell:AppsFolder\<PackageFamilyName>!App`, ~1,2s, só roda quando o resto falhou).
+Cada nível foi validado abrindo o programa de verdade e conferindo o processo
+novo (Chrome, Discord, Excel, VS Code, Steam, Calculadora, WhatsApp, Bloco de
+Notas) — não só que a chamada "não deu erro".
+
+**Achado que mudou o desenho: o modelo local não chama função de forma
+confiável.** Registrei `_tool_abrir_programa` como ferramenta ADK do agente
+`sistema` (como já existe pra `casa`) e a resposta falada dizia "Abro Bloco de
+Notas" — mas o Notepad nunca abria. Isolei o problema testando
+`runner.run_async()` direto, fora do pipeline: **0 chamadas de função em 8
+tentativas**, tanto no agente `sistema` (ferramenta nova) quanto no `casa`
+(`_tool_controlar_luz`, ferramenta antiga — nunca comprovada de verdade; toda
+vez que "liga a luz" funcionou nos testes deste projeto foi pelo **Intent
+Router**, sem passar pelo LLM). O `qwen3.5:0.8b` via `ollama_chat` + LiteLLM +
+ADK simplesmente narra a ação como se tivesse feito, em vez de chamar a
+função — nos oito testes, sempre.
+
+Por isso "abrir programa" virou **intent local** (`config/intents/sistema.yml`,
+`skills/apps.py`), igual luz/hora/temperatura: regex captura o nome depois de
+"abre/executa/inicia", sem LLM no caminho, current com 0 chance de o modelo
+inventar que abriu algo que não abriu. `_tool_abrir_programa` continua
+registrada no agente `sistema` (não atrapalha, e serve se um modelo melhor
+entrar no lugar do 0.8b), mas não é o caminho que roda hoje.
+
+**Consertado no caminho: resposta de skill sem síntese rápida.** Só descobri o
+tool-calling quebrado porque o TESTE também escondia o problema: `_speak_tts`
+das respostas de skill (`response_text` dinâmico — "Abrindo Bloco de Notas.",
+e também `info.time`/`info.temperature`) nunca recebia o `perfil_resposta`
+rápido criado hoje mais cedo (ver seção seguinte) — só o streaming do LLM
+recebia. Toda confirmação dinâmica de skill saía pela voz clonada, e por nunca
+repetir (nome de programa varia, hora muda a cada minuto) nunca cacheava:
+`tts_first_audio_ms` medido em **117 segundos** pra "Abrindo Bloco de Notas."
+antes do conserto, **1,66 segundos** depois. Corrigido em `dialog.py::on_final`.
+
+**Achado à parte, sobre o ambiente esta noite:** `test_audio_e2e.py` cenário 2
+e `test_agentes_e2e.py` falharam/degradaram por contenção de GPU real — VRAM em
+93% (7619/8151 MiB) com `lora-bench` e o ChatGPT desktop também usando a placa
+ao mesmo tempo, fora o Matheus usando o JARVIS ao vivo durante os testes.
+`despertar_gpu()` (chamada normalmente de ~1-2s no wake) chegou a levar
+50s+, travando a transcrição do comando seguinte atrás dela na mesma GPU. Não é
+regressão desta mudança — é o mesmo "GPU disputada distorce tudo" já anotado em
+DESEMPENHO.md, só que desta vez vindo de processos de fora do JARVIS.
+
 ## A voz clonada é lenta demais pra resposta ao vivo (2026-08-11)
 
 Matheus: *"a voz tá demorando a ser construída com o tts q vc botou, preciso q seja

@@ -1,0 +1,19 @@
+# Apelidos de programa -> o que o os.startfile abre.
+#
+# Não é obrigatório cadastrar nada aqui: qualquer atalho que já está no Menu
+# Iniciar é achado por aproximação de nome, e até app só-da-Store (sem atalho
+# em arquivo, ex.: WhatsApp) é achado no fallback (ver server/jarvis/system/apps.py).
+# Isto serve só pra dois casos:
+#   1. você fala diferente do nome do atalho ("navegador" -> Chrome);
+#   2. a busca por aproximação acertaria o app errado.
+#
+# NÃO cadastre aqui um app que você não confirmou que tem atalho na máquina —
+# o apelido tem que ser o nome de exibição REAL do atalho/pacote, senão ele
+# "resolve" e falha na hora de abrir. Os dois abaixo foram testados nesta
+# máquina; ajuste pros seus.
+apps:
+  navegador: "Google Chrome"
+  internet: "Google Chrome"
+  vscode: "Visual Studio Code"
+  codigo: "Visual Studio Code"
+  steam: "Steam"

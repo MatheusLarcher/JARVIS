@@ -10,7 +10,7 @@ import logging
 import os
 
 from ..config import config
-from .agent import _extras_llm, _tool_controlar_luz, _tool_temperatura
+from .agent import _extras_llm, _tool_abrir_programa, _tool_controlar_luz, _tool_temperatura
 
 log = logging.getLogger("jarvis.agentes")
 
@@ -59,7 +59,7 @@ PROMPTS = {
 
 FERRAMENTAS = {
     "casa": [_tool_controlar_luz, _tool_temperatura],
-    "sistema": [],
+    "sistema": [_tool_abrir_programa],
     "conversa": [],
     "avancado": [],
 }

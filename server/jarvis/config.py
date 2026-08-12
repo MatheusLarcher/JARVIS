@@ -32,6 +32,8 @@ class Config:
         self.devices = _load("devices.yml")["devices"]
         self.house = _load("house.yml")
         self.responses = _load("responses.yml")["responses"]
+        # apelido de programa -> alvo do os.startfile (ver system/apps.py)
+        self.apps = _load("apps.yml").get("apps", {})
         self.intents = []
         for p in sorted((CONFIG_DIR / "intents").glob("*.yml")):
             with open(p, encoding="utf-8") as f:

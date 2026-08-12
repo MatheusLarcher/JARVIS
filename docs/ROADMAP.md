@@ -73,9 +73,14 @@ de falar. O mesmo material serve para um fine-tune de transcrição, que é o
 
 ### 7. Ferramentas de verdade para o agente `sistema`
 
-Hoje ele só sabe dizer que não sabe: não abre programa, não mexe no volume, não
-lê o que está na tela. É o agente mais fácil de tornar útil, porque tudo roda na
-mesma máquina.
+**Abrir programa: feito (2026-08-11)** — "Jarvis, abre o bloco de notas/o
+navegador/o whatsapp" funciona de verdade. Ver [MEMORIA.md](MEMORIA.md) pro
+porquê de ter virado **intent local**, não ferramenta do LLM.
+
+Ainda falta: mexer no volume, ler o que está na tela, fechar programa. Mesmo
+caminho do que já foi feito — como é local, "fechar o X" e "aumenta/diminui o
+volume" também dão pra resolver por regex + biblioteca padrão do Python/Windows,
+sem precisar do LLM decidir nada.
 
 ### 7b. Sobrepor o roteador e o agente — o maior ganho de latência
 

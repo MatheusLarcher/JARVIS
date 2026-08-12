@@ -13,6 +13,7 @@ from ..context.engine import DeviceContext
 from ..home_assistant.client import ha, resolve_light_entity
 from ..mcp.loader import load_toolsets
 from ..memory.db import store
+from ..system import apps as sistema_apps
 
 log = logging.getLogger("jarvis.agent")
 
@@ -33,6 +34,12 @@ async def _tool_controlar_luz(acao: str, comodo: str) -> dict:
 async def _tool_temperatura() -> dict:
     """Retorna a temperatura ambiente atual em graus Celsius."""
     return {"temperatura_c": await ha.temperature()}
+
+
+async def _tool_abrir_programa(nome: str) -> dict:
+    """Abre um programa do Windows nesta máquina pelo nome falado (ex.: 'navegador',
+    'spotify', 'bloco de notas', 'calculadora'). Devolve ok=False se não achar."""
+    return await sistema_apps.abrir(nome)
 
 
 def _extras_llm(cfg: dict) -> dict:

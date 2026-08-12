@@ -141,14 +141,19 @@ class DialogManager:
                 await self.send({"type": "state", "state": "EXECUTING"})
                 result = await skill.handle(intent_id, match.slots, ctx)
                 it.mark("tool_execution_ms")
+                # response_text de skill é montado na hora (hora atual, nome do
+                # programa...) e por isso nunca repete e nunca entra em cache —
+                # mesmo motivo do perfil_resposta na resposta livre do LLM
+                # (ver settings.yml → tts.perfil_resposta e MEMORIA.md 2026-08-11)
+                perfil = config.settings["tts"].get("perfil_resposta")
                 if result.response_intent:
                     response_text = await self._speak_library(result.response_intent)
                     if response_text is None and result.response_text:
                         response_text = result.response_text
-                        await self._speak_tts(response_text)
+                        await self._speak_tts(response_text, perfil)
                 elif result.response_text:
                     response_text = result.response_text
-                    await self._speak_tts(response_text)
+                    await self._speak_tts(response_text, perfil)
                 if not result.ok:
                     erro = result.error or f"skill {intent_id} falhou"
                 await self._fim_da_fala()

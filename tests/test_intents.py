@@ -33,7 +33,11 @@ CASES = [
     # ...mas cumprimento no meio de um pedido NÃO pode virar saudação
     ("bom dia, liga a luz da sala", "light.turn_on", {"room": "sala"}),
     ("como se diz bom dia em inglês", None, {}),
-    ("obrigado por avisar, agora abre o navegador", None, {}),
+    # abrir programa existe desde 2026-08-11: agora este composto tem uma
+    # segunda metade que É um pedido real, e ela tem que ser pega — mesmo
+    # padrão do "bom dia, liga a luz da sala" logo acima
+    ("obrigado por avisar, agora abre o navegador",
+     "system.abrir_programa", {"programa": "o navegador"}),
 ]
 
 

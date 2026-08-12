@@ -63,6 +63,8 @@ O que ainda não existe está em [ROADMAP.md](ROADMAP.md).
 | `skills/lights.py` | Liga/desliga luz, resolvendo o cômodo pelo contexto quando você não diz. |
 | `skills/info.py` | Hora e temperatura. |
 | `skills/social.py` | Cumprimento, agradecimento e despedida — com saudação pela hora do dia. |
+| `skills/apps.py` | Abre programa ("abre o bloco de notas/o navegador/o whatsapp"). Intent local — o LLM não entra, ver [MEMORIA.md](MEMORIA.md). |
+| `system/apps.py` | A resolução de verdade: utilitário embutido → apelido → atalho do Menu Iniciar por aproximação → app só-da-Store (fallback). |
 | `home_assistant/client.py` | Fala com o Home Assistant (ou simula, no modo `mock`) e traduz cômodo → `entity_id`. |
 | `mcp/loader.py` | Carrega os servidores MCP habilitados em `config/mcp.yml` como ferramentas do agente. |
 
@@ -96,6 +98,8 @@ O que ainda não existe está em [ROADMAP.md](ROADMAP.md).
 | `.env` | Chaves de API. **Não vai pro git** — modelo em `.env.example`. |
 | `house.yml` | Cômodos, dispositivos, `entity_id` e os lugares (casa/empresa) por rede Wi-Fi. |
 | `intents/core.yml` | Os comandos resolvidos por regra, com os padrões e os slots. |
+| `intents/sistema.yml` | Intent de abrir programa. |
+| `apps.yml` | Apelido de programa → o que o `os.startfile` abre (só quando a busca por aproximação não basta). |
 | `responses.yml` | As frases prontas de cada intent (viram wav pelo `build_library.py`). |
 | `mcp.yml` | Servidores MCP disponíveis pro agente. |
 

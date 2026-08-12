@@ -11,6 +11,16 @@
    `python server/scripts/build_library.py`.
 5. Teste em `tests/test_intents.py`.
 
+## Cadastrar um apelido de programa
+
+`config/apps.yml`. Só é preciso quando: (a) você fala diferente do nome do atalho
+("navegador" → Chrome), ou (b) a busca por aproximação (`system/apps.py`) acertaria
+o app errado. Qualquer atalho que já está no Menu Iniciar é achado sozinho, sem
+cadastro — incluindo app só-da-Microsoft-Store (WhatsApp e afins), que caem no
+fallback via `Get-AppxPackage`. **Confirme que o apelido é o nome de exibição real**
+do atalho/pacote antes de cadastrar — um apelido inventado "resolve" e falha na
+hora de abrir (ver docs/MEMORIA.md 2026-08-11).
+
 ## Adicionar um dispositivo
 
 1. Nova entrada em `config/devices.yml` (id, type, token novo, default_room).

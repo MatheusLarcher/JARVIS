@@ -1,0 +1,9 @@
+# Intents do agente "sistema" — resolvidos SEM LLM.
+intents:
+  - id: system.abrir_programa
+    examples: ["abre o bloco de notas", "abre o navegador", "abre o spotify", "executa a calculadora"]
+    # captura tudo depois do verbo; o artigo (o/a/os/as) é tirado no slot, não no regex,
+    # pra "abre o bloco de notas" não virar "bloco de notas" faltando o "o"
+    patterns:
+      - '\b(?:abre|abrir|abra|executa|executar|inicia|iniciar)\b\s+(?P<programa>.+)$'
+    response_intent: null   # resposta dinâmica: depende do que abriu (ou não)

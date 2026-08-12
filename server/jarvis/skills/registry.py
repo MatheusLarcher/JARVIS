@@ -1,9 +1,10 @@
+from .apps import AppsSkill
 from .base import Skill
 from .info import InfoSkill
 from .lights import LightsSkill
 from .social import SocialSkill
 
-_skills: list[Skill] = [LightsSkill(), InfoSkill(), SocialSkill()]
+_skills: list[Skill] = [LightsSkill(), InfoSkill(), SocialSkill(), AppsSkill()]
 
 _by_intent: dict[str, Skill] = {}
 for s in _skills:
